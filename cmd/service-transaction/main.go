@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"simadaservices/cmd/service-transaction/kernel"
 	"simadaservices/cmd/service-transaction/rest"
 	"simadaservices/pkg/middlewares"
@@ -52,7 +53,7 @@ func main() {
 
 	// register nats
 	// Connect to a server
-	nc, _ := nats.Connect(nats.DefaultURL)
+	nc, _ := nats.Connect(fmt.Sprintf("%s:%s", os.Getenv("NATS_HOST"), os.Getenv("NATS_PORT")))
 	nc.Subscribe("config.share", func(msg *nats.Msg) {
 		err := json.Unmarshal(msg.Data, &kernel.Kernel.Config)
 		if err != nil {
@@ -78,11 +79,20 @@ func main() {
 
 	setUpDB()
 
+	db, _ := kernel.Kernel.Config.DB.Connection.DB()
+	defer db.Close()
+
 	r := gin.Default()
 
 	// register router
-	apiGroup := r.Group("/v1/inventaris").Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
-	apiGroup.GET("/get", rest.NewInvoiceApi().Get)
+	apiGroup := r.Group("/v1/transaction")
+	{
+		apiGroup.Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
+		apiGroupTransaction := apiGroup.Group("/inventaris")
+		{
+			apiGroupTransaction.GET("/get", rest.NewInvoiceApi().Get)
+		}
+	}
 
 	r.Run(":" + kernel.Kernel.Config.SIMADA_SV_PORT_TRANSACTION)
 

@@ -4,7 +4,7 @@ import "time"
 
 type Inventaris struct {
 	ID                  int        `json:"id"`
-	NOReg               string     `json:"noreg"`
+	Noreg               string     `json:"noreg"`
 	Pidbarang           int        `json:"pidbarang"`
 	PIDOpd              int        `json:"pidopd"`
 	PIDLokasi           int        `json:"pidlokasi"`

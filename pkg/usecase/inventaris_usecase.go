@@ -5,12 +5,13 @@ import (
 	"simadaservices/pkg/models"
 	"strings"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
 
 type InvoiceUseCase interface {
-	Get(limit, skip int, g *gin.Context) (interface{}, int64, error)
+	Get(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 }
 
 type invoiceUseCaseImpl struct {
@@ -25,20 +26,31 @@ func NewInventarisUseCase(db *gorm.DB) InvoiceUseCase {
 
 type getInvoiceResponse struct {
 	*models.Inventaris
-	NamaRekAset    string `json:"nama_rek_aset"`
-	KelompokKib    string `json:"kelompok_kib"`
-	Jenis          string `json:"jenis"`
-	PenggunaBarang string `json:"pengguna_barang"`
+	NamaRekAset      string `json:"nama_rek_aset"`
+	KelompokKib      string `json:"kelompok_kib"`
+	Jenis            string `json:"jenis"`
+	StatusVerifikasi string `json:"status_verifikasi"`
+	PenggunaBarang   string `json:"pengguna_barang"`
 }
 
-func (i *invoiceUseCaseImpl) Get(limit, page int, g *gin.Context) (interface{}, int64, error) {
+func (i *invoiceUseCaseImpl) Get(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
 
 	inventaris := []getInvoiceResponse{}
 
 	whereClause := []string{}
+	whereClauseAccess := []string{}
 	depJoin := map[string]bool{}
 
 	// get the filter
+
+	if g.Query("draft") != "" {
+		if g.Query("draft") == "1" {
+			whereClause = append(whereClause, "inventaris.draft IS NOT NULL")
+		} else {
+			whereClause = append(whereClause, "inventaris.draft IS NULL")
+		}
+	}
+
 	if g.Query("published") != "" {
 		whereClause = append(whereClause, "inventaris.id_publish NOT NULL")
 	}
@@ -258,7 +270,7 @@ func (i *invoiceUseCaseImpl) Get(limit, page int, g *gin.Context) (interface{}, 
 	}
 
 	sql := i.db.
-		Offset((page - 1) * limit).
+		Offset(start).
 		Limit(limit).
 		Select([]string{
 			"inventaris.*",
@@ -307,10 +319,12 @@ func (i *invoiceUseCaseImpl) Get(limit, page int, g *gin.Context) (interface{}, 
 
 	organisasiLoggedIn := models.Organisasi{}
 
+	t, _ := g.Get("token_info")
+
 	// get organisasi
-	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", g.GetInt("user_logged_in_org_id")))
+	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", t.(jwt.MapClaims)["org_id"]))
 	if sqlOrgTx.Error != nil {
-		return inventaris, 0, sqlOrgTx.Error
+		return inventaris, 0, 0, sqlOrgTx.Error
 	}
 
 	if organisasiLoggedIn.Level == 0 {
@@ -321,14 +335,14 @@ func (i *invoiceUseCaseImpl) Get(limit, page int, g *gin.Context) (interface{}, 
 
 		sqlOrgLevel1 := i.db.Find(&level1Orgs, fmt.Sprintf("pid = %v", organisasiLoggedIn.ID))
 		if sqlOrgLevel1.Error != nil {
-			return inventaris, 0, sqlOrgLevel1.Error
+			return inventaris, 0, 0, sqlOrgLevel1.Error
 		}
 
 		for _, org := range level1Orgs {
 			level2Orgs := []models.Organisasi{}
 			sqlOrgLevel2 := i.db.Find(&level2Orgs, fmt.Sprintf("pid = %v", org.ID))
 			if sqlOrgLevel2.Error != nil {
-				return inventaris, 0, sqlOrgLevel2.Error
+				return inventaris, 0, 0, sqlOrgLevel2.Error
 			}
 			for _, org2 := range level1Orgs {
 				idsOrg = append(idsOrg, org2.ID)
@@ -342,31 +356,31 @@ func (i *invoiceUseCaseImpl) Get(limit, page int, g *gin.Context) (interface{}, 
 			elseIfSubKuasaPengguna = fmt.Sprintf("organisasi_sub_kuasa_pengguna.id IN (%v)", strings.Trim(strings.Join(strings.Split(fmt.Sprint(idsOrg), " "), ","), "[]"))
 		}
 
-		whereClause = append(whereClause, fmt.Sprintf(`
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			organisasi_pengguna.id = %v AND
 			(
 				(CASE WHEN organisasi_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_kuasa_pengguna.pid = %v END)
 				OR
-				(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE %s
+				(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE %s END)
 
 			)
 		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
 	} else if organisasiLoggedIn.Level == 1 {
-		whereClause = append(whereClause, fmt.Sprintf(`
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 		( organisasi_pengguna.id = %v AND organisasi_kuasa_pengguna.id = %v )
 		AND
 		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
 	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
 	} else if organisasiLoggedIn.Level == 2 {
-		whereClause = append(whereClause, fmt.Sprintf(`
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
 	}
 
-	// get count
+	// get count filtered
 	sqlCount := i.db.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClause, " AND ")).
+		Where(strings.Join(whereClauseAccess, " AND ")).
 		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
 		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
 		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
@@ -379,11 +393,49 @@ func (i *invoiceUseCaseImpl) Get(limit, page int, g *gin.Context) (interface{}, 
 	sqlTxCount := sqlCount.Count(&countData)
 
 	if sqlTxCount.Error != nil {
-		return nil, 0, sqlCount.Error
+		return nil, 0, 0, sqlCount.Error
+	}
+
+	whereClause = append(whereClause, whereClauseAccess...)
+	// get count filtered
+	sqlCountFiltered := i.db.
+		Model(new(models.Inventaris)).
+		Where(strings.Join(whereClause, " AND ")).
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
+		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+
+	var countDataFiltered int64
+
+	sqlTxCountFiltered := sqlCountFiltered.Count(&countDataFiltered)
+
+	if sqlTxCountFiltered.Error != nil {
+		return nil, 0, 0, sqlCountFiltered.Error
 	}
 
 	sqlTx := sql.Find(&inventaris, strings.Join(whereClause, " AND "))
 
-	return inventaris, countData, sqlTx.Error
+	for ind, _ := range inventaris {
+		if !inventaris[ind].VerifikatorFlag {
+			if inventaris[ind].VerifikatorIsRevise {
+				inventaris[ind].StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
+			} else {
+				if inventaris[ind].VerifikatorStatus == 0 {
+					inventaris[ind].StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
+				} else if inventaris[ind].VerifikatorStatus == 1 {
+					inventaris[ind].StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
+				} else if inventaris[ind].VerifikatorStatus == 2 {
+					inventaris[ind].StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+				}
+			}
+		} else {
+			inventaris[ind].StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+		}
+	}
+
+	return inventaris, countDataFiltered, countData, sqlTx.Error
 
 }

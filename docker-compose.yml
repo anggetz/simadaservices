@@ -1,0 +1,42 @@
+version: '3.7'
+services:
+  # ======== KAOS SERVICES
+  service-config:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-config/Dockerfile
+    restart: always
+    networks:
+      - service_epersediaan_epersediaan
+  service-auth:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-auth/Dockerfile
+    restart: always
+    depends_on:
+      - service-config
+    networks:
+      - service_epersediaan_epersediaan
+  service-report:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-report/Dockerfile
+    restart: always
+    depends_on:
+      - service-config
+    networks:
+      - service_epersediaan_epersediaan
+  service-transaction:
+      build:
+        context: ./
+        dockerfile: ./cmd/service-transaction/Dockerfile
+      restart: always
+      depends_on:
+        - service-config
+      networks:
+        - service_epersediaan_epersediaan
+networks:
+  simada_default:
+    external: true
+  service_epersediaan_epersediaan:
+    external: true

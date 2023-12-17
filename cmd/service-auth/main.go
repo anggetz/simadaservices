@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"simadaservices/cmd/service-auth/kernel"
 	"simadaservices/pkg/models"
 	"simadaservices/pkg/tools"
@@ -51,7 +52,7 @@ func main() {
 	kernel.Kernel = kernel.NewKernel()
 	// register nats
 	// Connect to a server
-	nc, _ := nats.Connect(nats.DefaultURL)
+	nc, _ := nats.Connect(fmt.Sprintf("%s:%s", os.Getenv("NATS_HOST"), os.Getenv("NATS_PORT")))
 	nc.Subscribe("config.share", func(msg *nats.Msg) {
 		err := json.Unmarshal(msg.Data, &kernel.Kernel.Config)
 		if err != nil {
@@ -96,6 +97,8 @@ func main() {
 	}
 
 	setUpDB()
+	db, _ := kernel.Kernel.Config.DB.Connection.DB()
+	defer db.Close()
 	log.Println("config receive", kernel.Kernel.Config)
 
 	r := gin.Default()

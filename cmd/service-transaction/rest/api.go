@@ -21,11 +21,11 @@ func NewInvoiceApi() InvoiceApi {
 }
 
 func (a *InvoiceImpl) Get(g *gin.Context) {
-	limit, _ := strconv.Atoi(g.Query("limit"))
-	page, _ := strconv.Atoi(g.Query("page"))
+	start, _ := strconv.Atoi(g.Query("start"))
+	length, _ := strconv.Atoi(g.Query("length"))
 
 	// fmt.Println(limit, page)
-	users, total, err := usecase.NewInventarisUseCase(kernel.Kernel.Config.DB.Connection).Get(limit, page, g)
+	users, totalFiltered, total, err := usecase.NewInventarisUseCase(kernel.Kernel.Config.DB.Connection).Get(length, start, g)
 	if err != nil {
 		g.JSON(400, err.Error())
 		g.Abort()
@@ -33,9 +33,10 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 	}
 
 	g.JSON(200, tools.HttpResponse{
-		Message: "success get data",
-		Data:    users,
-		Total:   total,
+		Message:         "success get data",
+		Data:            users,
+		RecordsFiltered: totalFiltered,
+		RecordsTotal:    total,
 	})
 	return
 }

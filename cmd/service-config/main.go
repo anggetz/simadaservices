@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"simadaservices/cmd/service-config/kernel"
@@ -26,7 +27,7 @@ func main() {
 
 	// register nats
 	// Connect to a server
-	nc, _ := nats.Connect(nats.DefaultURL)
+	nc, _ := nats.Connect(fmt.Sprintf("%s:%s", os.Getenv("NATS_HOST"), os.Getenv("NATS_PORT")))
 
 	kernel.Kernel = kernel.NewKernel()
 	kernel.Kernel.Config.SIMADA_SV_PORT_AUTH = os.Getenv("SIMADA_SV_PORT_AUTH")
