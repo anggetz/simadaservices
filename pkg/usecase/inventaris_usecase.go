@@ -31,6 +31,7 @@ type getInvoiceResponse struct {
 	Jenis            string `json:"jenis"`
 	StatusVerifikasi string `json:"status_verifikasi"`
 	PenggunaBarang   string `json:"pengguna_barang"`
+	Detail           string `json:"detail"`
 }
 
 func (i *invoiceUseCaseImpl) Get(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
@@ -419,6 +420,7 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, g *gin.Context) (interface{},
 	sqlTx := sql.Find(&inventaris, strings.Join(whereClause, " AND "))
 
 	for ind, _ := range inventaris {
+		inventaris[ind].Detail = "<i class='fa fa-plus-circle text-success'></i>"
 		if !inventaris[ind].VerifikatorFlag {
 			if inventaris[ind].VerifikatorIsRevise {
 				inventaris[ind].StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"

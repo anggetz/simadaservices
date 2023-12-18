@@ -1,6 +1,10 @@
 package rest
 
-import "github.com/gin-gonic/gin"
+import (
+	"simadaservices/pkg/tools"
+
+	"github.com/gin-gonic/gin"
+)
 
 type Api interface {
 	Get(*gin.Context)
@@ -14,4 +18,7 @@ func NewApi() Api {
 
 func (a *ApiImpl) Get(g *gin.Context) {
 
+	g.JSON(200, tools.HttpResponse{
+		Message: "success get data",
+	})
 }
