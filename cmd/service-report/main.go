@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
 )
 
@@ -48,6 +49,10 @@ func setUpDB() {
 }
 
 func main() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
 
 	kernel.Kernel = kernel.NewKernel()
 	// register nats
