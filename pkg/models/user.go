@@ -5,4 +5,5 @@ type User struct {
 	Username      string `json:"username"`
 	ApiToken      string `json:"api_token"`
 	PidOrganisasi int    `json:"pid_organisasi" gorm:"column:pid_organisasi"`
+	Level         int    `json:"level"`
 }

@@ -5,6 +5,8 @@ go 1.21.2
 require (
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/gin-gonic/gin v1.9.1
+	github.com/golang-queue/nats v0.0.8
+	github.com/golang-queue/queue v0.2.0
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.31.0
 	gorm.io/driver/postgres v1.5.4
@@ -27,6 +29,7 @@ require (
 	github.com/jackc/pgx/v5 v5.4.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.5 // indirect
+	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.17.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect

@@ -11,7 +11,7 @@ import (
 )
 
 type InvoiceUseCase interface {
-	Get(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
+	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
 }
 
 type invoiceUseCaseImpl struct {
@@ -32,9 +32,10 @@ type getInvoiceResponse struct {
 	StatusVerifikasi string `json:"status_verifikasi"`
 	PenggunaBarang   string `json:"pengguna_barang"`
 	Detail           string `json:"detail"`
+	CanDelete        bool   `json:"can_delete"`
 }
 
-func (i *invoiceUseCaseImpl) Get(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
+func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
 
 	inventaris := []getInvoiceResponse{}
 
@@ -420,7 +421,10 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, g *gin.Context) (interface{},
 	sqlTx := sql.Find(&inventaris, strings.Join(whereClause, " AND "))
 
 	for ind, _ := range inventaris {
-		inventaris[ind].Detail = "<i class='fa fa-plus-circle text-success'></i>"
+
+		if canDelete {
+			inventaris[ind].CanDelete = canDelete
+		}
 		if !inventaris[ind].VerifikatorFlag {
 			if inventaris[ind].VerifikatorIsRevise {
 				inventaris[ind].StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
