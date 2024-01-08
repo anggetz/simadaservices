@@ -390,9 +390,11 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
 		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
-	var countData int64
+	var countData struct {
+		Total int64
+	}
 
-	sqlTxCount := sqlCount.Count(&countData)
+	sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
 
 	if sqlTxCount.Error != nil {
 		return nil, 0, 0, sqlCount.Error
@@ -410,9 +412,11 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
 		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
-	var countDataFiltered int64
+	var countDataFiltered struct {
+		Total int64
+	}
 
-	sqlTxCountFiltered := sqlCountFiltered.Count(&countDataFiltered)
+	sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
 
 	if sqlTxCountFiltered.Error != nil {
 		return nil, 0, 0, sqlCountFiltered.Error
@@ -442,6 +446,6 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		}
 	}
 
-	return inventaris, countDataFiltered, countData, sqlTx.Error
+	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
 
 }
