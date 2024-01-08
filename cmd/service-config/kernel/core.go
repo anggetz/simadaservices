@@ -1,5 +1,7 @@
 package kernel
 
+import "github.com/adjust/rmq/v5"
+
 type dbConfig struct {
 	Host     string
 	User     string
@@ -14,6 +16,13 @@ type Config struct {
 	SIMADA_SV_PORT_TRANSACTION string
 	SIMADA_SV_PORT_REPORT      string
 	DB                         dbConfig
+	REDIS                      redisConfig
+}
+
+type redisConfig struct {
+	Host       string
+	Port       string
+	Connection *rmq.Connection
 }
 
 type core struct {
