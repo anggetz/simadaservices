@@ -271,22 +271,10 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidupt = '%s'", g.Query("subkuasa_filter")))
 	}
 
-	sql := i.db.
-		Offset(start).
-		Limit(limit).
-		Select([]string{
-			"inventaris.*",
-			"m_barang.nama_rek_aset",
-			"m_jenis_barang.kelompok_kib",
-			"m_jenis_barang.nama as jenis",
-			"m_organisasi.nama as pengguna_barang",
-		}).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+	sql := i.db
+	// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+	// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+	// Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	if _, ok := depJoin["detil_tanah"]; ok {
 		sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
@@ -367,28 +355,40 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 
 			)
 		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
+
+		sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+
 	} else if organisasiLoggedIn.Level == 1 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 		( organisasi_pengguna.id = %v AND organisasi_kuasa_pengguna.id = %v )
 		AND
 		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
 	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
+
+		sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	} else if organisasiLoggedIn.Level == 2 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
+
+		sql.
+			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	}
 
 	// get count filtered
-	sqlCount := i.db.
+	sqlCount := sql.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClauseAccess, " AND ")).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Where(strings.Join(whereClauseAccess, " AND "))
+		// Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		// Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		// Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
+		// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		// Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	var countData struct {
 		Total int64
@@ -402,15 +402,15 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 
 	whereClause = append(whereClause, whereClauseAccess...)
 	// get count filtered
-	sqlCountFiltered := i.db.
+	sqlCountFiltered := sql.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClause, " AND ")).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Where(strings.Join(whereClause, " AND "))
+		// Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		// Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		// Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
+		// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		// Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	var countDataFiltered struct {
 		Total int64
@@ -422,7 +422,20 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		return nil, 0, 0, sqlCountFiltered.Error
 	}
 
-	sqlTx := sql.Find(&inventaris, strings.Join(whereClause, " AND "))
+	sqlTx := sql.
+		Offset(start).
+		Limit(limit).
+		Select([]string{
+			"inventaris.*",
+			"m_barang.nama_rek_aset",
+			"m_jenis_barang.kelompok_kib",
+			"m_jenis_barang.nama as jenis",
+			"m_organisasi.nama as pengguna_barang",
+		}).
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
+		Find(&inventaris, strings.Join(whereClause, " AND "))
 
 	for ind, _ := range inventaris {
 
