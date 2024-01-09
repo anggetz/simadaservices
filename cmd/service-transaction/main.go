@@ -114,6 +114,13 @@ func main() {
 		{
 			apiGroupTransaction.GET("/get", rest.NewInvoiceApi().Get)
 		}
+
+		apiGroupHome := apiGroup.Group("/home")
+		{
+			apiGroupHome.GET("/get-total-aset", rest.NewHomeApi().GetTotalAset)
+			apiGroupHome.GET("/get-nilai-aset", rest.NewHomeApi().GetNilaiAsset)
+			apiGroupHome.GET("/get-nilai-aset-by-kode-jenis", rest.NewHomeApi().GetNilaiAssetByKodeJenis)
+		}
 	}
 
 	r.Run(":" + kernel.Kernel.Config.SIMADA_SV_PORT_TRANSACTION)
