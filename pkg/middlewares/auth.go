@@ -2,7 +2,6 @@ package middlewares
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"simadaservices/pkg/models"
 	"strings"
@@ -75,8 +74,6 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 		ctx.Abort()
 		return
 	}
-
-	fmt.Println(claims["org_id"], "claims")
 
 	ctx.Set("token_info", claims)
 	if !token.Response {

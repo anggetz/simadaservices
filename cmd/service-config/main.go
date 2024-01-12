@@ -40,6 +40,9 @@ func main() {
 	kernel.Kernel.Config.DB.Password = os.Getenv("SIMADA_DB_PG_PASSWORD")
 	kernel.Kernel.Config.DB.TimeZone = os.Getenv("SIMADA_DB_PG_TIMEZONE")
 
+	kernel.Kernel.Config.REDIS.Host = os.Getenv("REDIS_HOST")
+	kernel.Kernel.Config.REDIS.Port = os.Getenv("REDIS_PORT")
+
 	confMarshalled, err := json.Marshal(kernel.Kernel.Config)
 	if err != nil {
 		panic(err)
