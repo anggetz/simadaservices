@@ -59,8 +59,6 @@ func main() {
 			panic(err)
 		}
 
-		setUpDB()
-
 		log.Println("new config receive", kernel.Kernel.Config)
 	})
 
@@ -84,7 +82,9 @@ func main() {
 
 	// register router
 	apiGroup := r.Group("/v1/report").Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
-	apiGroup.GET("/get", rest.NewApi().Get)
+	apiGroup.GET("/get-inventaris", rest.NewApi().GetInventaris)
+	apiGroup.GET("/get-rekapitulasi", rest.NewApi().GetInventaris)
+	// apiGroup.GET("/get", rest.NewApi().Get)
 
 	r.Run(":" + kernel.Kernel.Config.SIMADA_SV_PORT_REPORT)
 
