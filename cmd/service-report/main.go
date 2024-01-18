@@ -88,7 +88,11 @@ func main() {
 	// register router
 	apiGroup := r.Group("/v1/report").Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
 	apiGroup.GET("/get-inventaris", rest.NewApi().GetInventaris)
-	apiGroup.GET("/get-rekapitulasi", rest.NewApi().GetInventaris)
+	apiGroup.GET("/get-rekapitulasi", rest.NewApi().GetRekapitulasi)
+	apiGroup.GET("/get-total-rekapitulasi", rest.NewApi().GetTotalRekapitulasi)
+	apiGroup.GET("/get-bmdatl", rest.NewApi().GetBmdAtl)
+	apiGroup.GET("/get-bmdatl-totalrecords", rest.NewApi().GetBmdAtlTotalRecords)
+	apiGroup.GET("/get-total-bmdatl", rest.NewApi().GetTotalBmdAtl)
 	// apiGroup.GET("/get", rest.NewApi().Get)
 
 	r.Run(":" + kernel.Kernel.Config.SIMADA_SV_PORT_REPORT)

@@ -3,6 +3,7 @@ package kernel
 import (
 	"simadaservices/pkg/models"
 
+	"github.com/adjust/rmq/v5"
 	"gorm.io/gorm"
 )
 
@@ -16,9 +17,16 @@ type dbConfig struct {
 	Connection *gorm.DB
 }
 
+type redisConfig struct {
+	Host       string
+	Port       string
+	Connection *rmq.Connection
+}
+
 type Config struct {
 	SIMADA_SV_PORT_REPORT string
 	DB                    dbConfig
+	REDIS                 redisConfig
 }
 
 type core struct {

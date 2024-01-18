@@ -382,13 +382,13 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	// get count filtered
 	sqlCount := sql.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClauseAccess, " AND "))
-		// Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		// Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		// Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		// Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Where(strings.Join(whereClauseAccess, " AND ")).
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
+		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	var countData struct {
 		Total int64
@@ -404,13 +404,13 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	// get count filtered
 	sqlCountFiltered := sql.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClause, " AND "))
-		// Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		// Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		// Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		// Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Where(strings.Join(whereClause, " AND ")).
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
+		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	var countDataFiltered struct {
 		Total int64
@@ -460,5 +460,4 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	}
 
 	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
-
 }
