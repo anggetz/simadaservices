@@ -1,26 +1,33 @@
 package usecase
 
 import (
+	"encoding/json"
 	"fmt"
 	"simadaservices/pkg/models"
 	"strings"
 
 	"github.com/dgrijalva/jwt-go"
+	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/gin-gonic/gin"
+	"gopkg.in/mgo.v2/bson"
 	"gorm.io/gorm"
 )
 
 type InvoiceUseCase interface {
 	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
+	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 }
 
 type invoiceUseCaseImpl struct {
 	db *gorm.DB
+	es *elasticsearch.Client
 }
 
-func NewInventarisUseCase(db *gorm.DB) InvoiceUseCase {
+func NewInventarisUseCase(db *gorm.DB, es *elasticsearch.Client) InvoiceUseCase {
 	return &invoiceUseCaseImpl{
 		db: db,
+		es: es,
 	}
 }
 
@@ -460,5 +467,74 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	}
 
 	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
+
+}
+
+func (i *invoiceUseCaseImpl) GetFromElastic(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
+
+	queryFilter := bson.M{}
+	boolQuery := bson.M{}
+
+	if g.Query("draft") != "" {
+		if g.Query("draft") == "1" {
+			boolQuery["must"] = bson.M{
+				"term": bson.M{
+					"draft": "1",
+				},
+			}
+		} else {
+			boolQuery["must_not"] = bson.M{
+				"term": bson.M{
+					"draft": "1",
+				},
+			}
+		}
+	}
+
+	fmt.Println(queryFilter)
+
+	query := bson.M{
+		"size": 10,
+		"from": start,
+		"query": bson.M{
+			"bool": boolQuery,
+		},
+	}
+
+	byQuery, err := json.Marshal(query)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	elasticResponse := models.Elastic{}
+
+	res, err := i.es.Search(
+		i.es.Search.WithIndex("inventaris-index"),
+		i.es.Search.WithBody(strings.NewReader(string(byQuery))),
+	)
+
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	err = json.NewDecoder(res.Body).Decode(&elasticResponse)
+
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	res, err = i.es.Count(
+		func(e *esapi.CountRequest) {
+			e.Index = []string{"inventaris-index"}
+		},
+	)
+
+	countElastic := struct {
+		Count int64
+	}{}
+
+	err = json.NewDecoder(res.Body).Decode(&countElastic)
+
+	return elasticResponse.Hits.Hits, int64(elasticResponse.Hits.Total.Value), countElastic.Count, nil
 
 }

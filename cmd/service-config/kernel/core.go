@@ -1,6 +1,9 @@
 package kernel
 
-import "github.com/adjust/rmq/v5"
+import (
+	"github.com/adjust/rmq/v5"
+	"github.com/elastic/go-elasticsearch/v8"
+)
 
 type dbConfig struct {
 	Host     string
@@ -11,12 +14,18 @@ type dbConfig struct {
 	TimeZone string
 }
 
+type elasticConfig struct {
+	Address string
+	Client  *elasticsearch.Client
+}
+
 type Config struct {
 	SIMADA_SV_PORT_AUTH        string
 	SIMADA_SV_PORT_TRANSACTION string
 	SIMADA_SV_PORT_REPORT      string
 	DB                         dbConfig
 	REDIS                      redisConfig
+	ELASTIC                    elasticConfig
 }
 
 type redisConfig struct {

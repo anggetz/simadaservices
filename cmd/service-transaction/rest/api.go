@@ -7,7 +7,6 @@ import (
 	"simadaservices/pkg/usecase"
 	"strconv"
 
-	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
 )
 
@@ -27,7 +26,7 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 	length, _ := strconv.Atoi(g.Query("length"))
 	action := g.Query("action")
 
-	t, _ := g.Get("token_info")
+	// t, _ := g.Get("token_info")
 
 	// fmt.Println(limit, page)
 	if action == "export-excel" {
@@ -47,14 +46,22 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 		}
 
 	} else {
-		users, totalFiltered, total, err := usecase.
-			NewInventarisUseCase(kernel.Kernel.Config.DB.Connection).
-			Get(
+		// users, totalFiltered, total, err := usecase.
+		// 	NewInventarisUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.ELASTIC.Client).
+		// 	Get(
+		// 		length,
+		// 		start,
+		// 		usecase.NewAuthUseCase(kernel.Kernel.Config.DB.Connection).
+		// 			IsUserHasAccess(t.(jwt.MapClaims)["id"].(float64),
+		// 				[]string{"transaksi.inventaris.delete"}),
+		// 		g,
+		// 	)
+
+		inventaris, totalFiltered, total, err := usecase.
+			NewInventarisUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.ELASTIC.Client).
+			GetFromElastic(
 				length,
 				start,
-				usecase.NewAuthUseCase(kernel.Kernel.Config.DB.Connection).
-					IsUserHasAccess(t.(jwt.MapClaims)["id"].(float64),
-						[]string{"transaksi.inventaris.delete"}),
 				g,
 			)
 		if err != nil {
@@ -64,7 +71,7 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 		}
 		g.JSON(200, tools.HttpResponse{
 			Message:         "success get data",
-			Data:            users,
+			Data:            inventaris,
 			RecordsFiltered: totalFiltered,
 			RecordsTotal:    total,
 		})
