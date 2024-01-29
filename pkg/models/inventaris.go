@@ -58,7 +58,7 @@ type Inventaris struct {
 	BarangMaster        *Barang           `json:"barang" gorm:"foreignKey:pidbarang"`
 	DetilTanahRel       *DetilTanah       `json:"detil_tanah" gorm:"foreignKey:ID;references:pidinventaris"`
 	DetilMesinRel       *DetilMesin       `json:"detil_mesin" gorm:"foreignKey:ID;references:pidinventaris"`
-	DetilAsetLainnyaRel *DetilAsetLainnya `json:"detil_aset_lainnya" gorm:"foreignKey:ID;references:pidinventaris"`
+	DetilAsetLainnyaRel *DetilAsetLainnya `json:"detil_aset_lainnya" gorm:"foreignKey:ID;references:PidInventaris"`
 	DetilBangunanRel    *DetilBangunan    `json:"detil_bangunan" gorm:"foreignKey:ID;references:pidinventaris"`
 	DetilJalanRel       *DetilJalan       `json:"detil_jalan" gorm:"foreignKey:ID;references:pidinventaris"`
 	DetilKonstruksiRel  *DetilKonstruksi  `json:"detil_konstruksi" gorm:"foreignKey:ID;references:pidinventaris"`
