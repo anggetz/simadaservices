@@ -106,7 +106,7 @@ func main() {
 		db.Close()
 	}()
 
-	gocron.Every(6).Hours().Lock().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
+	gocron.Every(6).Hours().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
 	// gocron.Every(6).Hour().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
 
 	gocron.RunAll()
