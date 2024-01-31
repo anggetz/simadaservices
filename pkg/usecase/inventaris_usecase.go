@@ -1,15 +1,18 @@
 package usecase
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"simadaservices/pkg/models"
 	"strings"
+	"time"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/cache/v9"
 	"gopkg.in/mgo.v2/bson"
 	"gorm.io/gorm"
 )
@@ -17,18 +20,28 @@ import (
 type InvoiceUseCase interface {
 	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
 	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
+	SetDB(*gorm.DB) InvoiceUseCase
+	SetRedisCache(*cache.Cache) InvoiceUseCase
 }
 
 type invoiceUseCaseImpl struct {
-	db *gorm.DB
-	es *elasticsearch.Client
+	db         *gorm.DB
+	es         *elasticsearch.Client
+	redisCache *cache.Cache
 }
 
-func NewInventarisUseCase(db *gorm.DB, es *elasticsearch.Client) InvoiceUseCase {
-	return &invoiceUseCaseImpl{
-		db: db,
-		es: es,
-	}
+func NewInventarisUseCase() InvoiceUseCase {
+	return &invoiceUseCaseImpl{}
+}
+
+func (i *invoiceUseCaseImpl) SetDB(db *gorm.DB) InvoiceUseCase {
+	i.db = db
+	return i
+}
+
+func (i *invoiceUseCaseImpl) SetRedisCache(redisCache *cache.Cache) InvoiceUseCase {
+	i.redisCache = redisCache
+	return i
 }
 
 type getInvoiceResponse struct {
@@ -393,18 +406,26 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
 		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
 		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	var countData struct {
 		Total int64
 	}
 
-	sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
+	err := i.redisCache.Get(context.TODO(), "inventaris-count-all", &countData.Total)
+	if err != nil && err != cache.ErrCacheMiss {
 
-	if sqlTxCount.Error != nil {
-		return nil, 0, 0, sqlCount.Error
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	if err == cache.ErrCacheMiss {
+		sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
+
+		if sqlTxCount.Error != nil {
+			return nil, 0, 0, sqlCount.Error
+		}
 	}
 
 	whereClause = append(whereClause, whereClauseAccess...)
@@ -415,18 +436,41 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
 		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
 		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	var countDataFiltered struct {
 		Total int64
 	}
 
-	sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
+	// get from cache
+	err = i.redisCache.Get(context.TODO(), strings.Join(whereClause, " AND "), &countDataFiltered.Total)
+	if err != nil && err != cache.ErrCacheMiss {
 
-	if sqlTxCountFiltered.Error != nil {
-		return nil, 0, 0, sqlCountFiltered.Error
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	fmt.Println("check redis error", err, countDataFiltered.Total)
+
+	if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
+		sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
+
+		if sqlTxCountFiltered.Error != nil {
+			return nil, 0, 0, sqlCountFiltered.Error
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   strings.Join(whereClause, " AND "),
+			Value: countDataFiltered.Total,
+			TTL:   time.Minute * 10,
+		})
+
+	}
+
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("error when set redis cache: %v", err.Error())
 	}
 
 	sqlTx := sql.

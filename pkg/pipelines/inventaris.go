@@ -13,20 +13,29 @@ import (
 
 	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
+	"github.com/go-redis/cache/v9"
 	"gopkg.in/mgo.v2/bson"
 	"gorm.io/gorm"
 )
 
 type SyncInventaris struct {
-	es *elasticsearch.Client
-	db gorm.DB
+	es         *elasticsearch.Client
+	db         *gorm.DB
+	redisCache *cache.Cache
 }
 
-func NewSyncInventaris(es *elasticsearch.Client, db gorm.DB) *SyncInventaris {
-	return &SyncInventaris{
-		es: es,
-		db: db,
-	}
+func NewSyncInventaris() *SyncInventaris {
+	return &SyncInventaris{}
+}
+
+func (s *SyncInventaris) SetRedisCache(redisCache *cache.Cache) *SyncInventaris {
+	s.redisCache = redisCache
+	return s
+}
+
+func (s *SyncInventaris) SetDB(db *gorm.DB) *SyncInventaris {
+	s.db = db
+	return s
 }
 
 func (s *SyncInventaris) SyncPgToElastic() {
@@ -206,5 +215,31 @@ func (s *SyncInventaris) SyncPgToElastic() {
 	}
 
 	fmt.Println("end performing elastic ", time.Now())
+
+}
+
+func (s *SyncInventaris) CountInventaris() {
+	// set count inventaris all
+
+	var countAll int64
+
+	txCountAll := s.db.Table(new(models.Inventaris).TableName()).Count(&countAll)
+
+	if txCountAll.Error != nil {
+		fmt.Println("error pipeline", txCountAll.Error.Error())
+		return
+	}
+
+	err := s.redisCache.Set(&cache.Item{
+		Ctx:   context.TODO(),
+		Key:   "inventaris-count-all",
+		Value: countAll,
+		TTL:   time.Hour,
+	})
+
+	if err != nil {
+		fmt.Println("error set cache", err.Error())
+		return
+	}
 
 }

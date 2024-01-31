@@ -5,6 +5,7 @@ import (
 
 	"github.com/adjust/rmq/v5"
 	"github.com/elastic/go-elasticsearch/v8"
+	"github.com/go-redis/cache/v9"
 	"gorm.io/gorm"
 )
 
@@ -22,6 +23,7 @@ type redisConfig struct {
 	Host       string
 	Port       string
 	Connection *rmq.Connection
+	Cache      *cache.Cache
 }
 
 type elasticConfig struct {

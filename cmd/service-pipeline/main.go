@@ -11,6 +11,9 @@ import (
 	"time"
 
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"
+	"github.com/go-redis/cache/v9"
+	"github.com/redis/go-redis/v9"
+
 	"github.com/jasonlvhit/gocron"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
@@ -63,6 +66,21 @@ func setUpDB() {
 	kernel.Kernel.Config.DB.Connection = db
 }
 
+func setupRediCache() {
+	ring := redis.NewRing(&redis.RingOptions{
+		Addrs: map[string]string{
+			"server1": fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port),
+		},
+	})
+
+	mycache := cache.New(&cache.Options{
+		Redis:      ring,
+		LocalCache: cache.NewTinyLFU(1000, time.Minute),
+	})
+
+	kernel.Kernel.Config.REDIS.Cache = mycache
+}
+
 func main() {
 	err := godotenv.Load()
 	if err != nil {
@@ -82,6 +100,7 @@ func main() {
 
 		setUpDB()
 		setupElasticDB()
+		setupRediCache()
 
 		log.Println("new config receive", kernel.Kernel.Config)
 	})
@@ -100,16 +119,17 @@ func main() {
 
 	setUpDB()
 	setupElasticDB()
+	setupRediCache()
 
 	defer func() {
 		db, _ := kernel.Kernel.Config.DB.Connection.DB()
 		db.Close()
 	}()
 
-	gocron.Every(6).Hours().Lock().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
+	// gocron.Every(10).Minutes().Lock().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
+	gocron.Every(10).Minutes().Do(pipelines.NewSyncInventaris().SetDB(kernel.Kernel.Config.DB.Connection).SetRedisCache(kernel.Kernel.Config.REDIS.Cache).CountInventaris)
 	// gocron.Every(6).Hour().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
 
 	gocron.RunAll()
-
 	<-gocron.Start()
 }
