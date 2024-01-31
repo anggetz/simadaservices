@@ -22,6 +22,8 @@ import (
 )
 
 func setupRediCache() {
+	fmt.Println("connect to", fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port))
+
 	ring := redis.NewRing(&redis.RingOptions{
 		Addrs: map[string]string{
 			"server1": fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port),
