@@ -2,6 +2,7 @@ package middlewares
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"simadaservices/pkg/models"
 	"strings"
@@ -14,13 +15,19 @@ import (
 )
 
 type middlewareAuth struct {
-	Nc *nats.Conn
+	Nc     *nats.Conn
+	jwtKey string
 }
 
 func NewMiddlewareAuth(nc *nats.Conn) *middlewareAuth {
 	return &middlewareAuth{
 		Nc: nc,
 	}
+}
+
+func (m *middlewareAuth) SetJwtKey(jwtKey string) *middlewareAuth {
+	m.jwtKey = jwtKey
+	return m
 }
 
 func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
@@ -47,6 +54,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 	// }
 
 	if token.Token == "" {
+		fmt.Println("error token is nil")
 		ctx.JSON(401, "Unauthorized")
 		ctx.Abort()
 		return
@@ -54,6 +62,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 
 	marshalledJson, err := json.Marshal(token)
 	if err != nil {
+		fmt.Println("error marshalled token", err.Error())
 		ctx.JSON(401, "Unauthorized")
 		ctx.Abort()
 		return
@@ -62,6 +71,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 	resMsg, err := m.Nc.Request("auth.validate", marshalledJson, time.Second*10)
 
 	if err != nil {
+		fmt.Println("error request validate token", err.Error())
 		ctx.JSON(401, "Unauthorized")
 		ctx.Abort()
 		return
@@ -70,6 +80,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 	err = json.Unmarshal(resMsg.Data, &token)
 
 	if err != nil {
+		fmt.Println("error unmarshall token", err.Error())
 		ctx.JSON(401, "Unauthorized")
 		ctx.Abort()
 		return
@@ -77,6 +88,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 
 	ctx.Set("token_info", claims)
 	if !token.Response {
+		fmt.Println("error get claim token", err.Error())
 		ctx.JSON(401, "Unauthorized")
 		ctx.Abort()
 		return

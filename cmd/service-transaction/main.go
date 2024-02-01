@@ -149,7 +149,7 @@ func main() {
 	// register router
 	apiGroup := r.Group("/v1/transaction")
 	{
-		apiGroup.Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
+		apiGroup.Use(middlewares.NewMiddlewareAuth(nc).SetJwtKey(kernel.Kernel.Config.JwtKey).TokenValidate)
 		apiGroupTransaction := apiGroup.Group("/inventaris")
 		{
 			apiGroupTransaction.GET("/get", rest.NewInvoiceApi().Get)

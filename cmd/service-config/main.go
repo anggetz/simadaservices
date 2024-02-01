@@ -43,6 +43,8 @@ func main() {
 	kernel.Kernel.Config.REDIS.Host = os.Getenv("REDIS_HOST")
 	kernel.Kernel.Config.REDIS.Port = os.Getenv("REDIS_PORT")
 
+	kernel.Kernel.Config.JwtKey = os.Getenv("JWT_KEY")
+
 	kernel.Kernel.Config.ELASTIC.Address = os.Getenv("ELASTIC_ADDRESS")
 
 	confMarshalled, err := json.Marshal(kernel.Kernel.Config)
