@@ -1,6 +1,8 @@
 package usecase
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"simadaservices/pkg/models"
 
@@ -24,7 +26,11 @@ func NewAuthUseCase(db *gorm.DB) AuthUseCase {
 
 func (a *authUseCaseImpl) ValidateToken(token string) (models.User, bool) {
 	user := models.User{}
-	sqlTx := a.db.Find(&user, fmt.Sprintf("api_token = '%s'", user.ApiToken))
+
+	sha := sha256.New()
+	sha.Write([]byte(token))
+
+	sqlTx := a.db.Find(&user, fmt.Sprintf("api_token = '%s'", hex.EncodeToString(sha.Sum(nil))))
 
 	if sqlTx.Error != nil {
 		fmt.Println("ERR", sqlTx.Error.Error())
