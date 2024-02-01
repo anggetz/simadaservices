@@ -3,7 +3,6 @@ package middlewares
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"simadaservices/pkg/models"
 	"strings"
 	"time"
@@ -44,7 +43,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 	claims := jwt.MapClaims{}
 
 	_, err := jwt.ParseWithClaims(token.Token, claims, func(token *jwt.Token) (interface{}, error) {
-		return []byte(os.Getenv("JWT_KEY")), nil
+		return []byte(m.jwtKey), nil
 	})
 
 	// if !tokenClaims.Valid {
