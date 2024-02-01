@@ -1,6 +1,5 @@
 version: '3.7'
 services:
-  # ======== KAOS SERVICES
   service-config:
     build:
       context: ./
@@ -27,14 +26,28 @@ services:
     networks:
       - service_epersediaan_epersediaan
   service-transaction:
-      build:
-        context: ./
-        dockerfile: ./cmd/service-transaction/Dockerfile
-      restart: always
-      depends_on:
-        - service-config
-      networks:
-        - service_epersediaan_epersediaan
+    build:
+      context: ./
+      dockerfile: ./cmd/service-transaction/Dockerfile
+    restart: always
+    depends_on:
+      - service-config
+    networks:
+      - service_epersediaan_epersediaan
+  service-pipeline:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-pipeline/Dockerfile
+    restart: always
+    depends_on:
+      - service-config
+    networks:
+      - service_epersediaan_epersediaan
+  service-elastic:
+    container_name: elastic
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.12.0
+    restart: always
+
 networks:
   simada_default:
     external: true

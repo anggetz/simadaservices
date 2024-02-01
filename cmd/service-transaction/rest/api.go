@@ -39,7 +39,11 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 			return
 		}
 
-		err = preQueueWorkerExcel.Publish("test")
+		payload := []string{
+			"sfdsf", "sfds",
+		}
+
+		err = preQueueWorkerExcel.Publish(payload...)
 		if err != nil {
 			g.JSON(400, err.Error())
 			g.Abort()
@@ -47,8 +51,10 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 		}
 
 	} else {
-		users, totalFiltered, total, err := usecase.
-			NewInventarisUseCase(kernel.Kernel.Config.DB.Connection).
+		inventaris, totalFiltered, total, err := usecase.
+			NewInventarisUseCase().
+			SetDB(kernel.Kernel.Config.DB.Connection).
+			SetRedisCache(kernel.Kernel.Config.REDIS.Cache).
 			Get(
 				length,
 				start,
@@ -57,6 +63,14 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 						[]string{"transaksi.inventaris.delete"}),
 				g,
 			)
+
+		// inventaris, totalFiltered, total, err := usecase.
+		// 	NewInventarisUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.ELASTIC.Client).
+		// 	GetFromElastic(
+		// 		length,
+		// 		start,
+		// 		g,
+		// 	)
 		if err != nil {
 			g.JSON(400, err.Error())
 			g.Abort()
@@ -64,7 +78,7 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 		}
 		g.JSON(200, tools.HttpResponse{
 			Message:         "success get data",
-			Data:            users,
+			Data:            inventaris,
 			RecordsFiltered: totalFiltered,
 			RecordsTotal:    total,
 		})

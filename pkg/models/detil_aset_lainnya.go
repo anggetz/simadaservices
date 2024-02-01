@@ -4,7 +4,7 @@ import "time"
 
 type DetilAsetLainnya struct {
 	ID                                uint       `json:"id"`
-	PidInventaris                     int        `json:"pidinventaris"`
+	Pidinventaris                     int        `json:"pidinventaris"`
 	BukuJudul                         string     `json:"buku_judul"`
 	BukuSpesifikasi                   string     `json:"buku_spesifikasi"`
 	SeniAsal                          string     `json:"seni_asal"`

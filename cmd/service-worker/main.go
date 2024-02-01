@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"simadaservices/cmd/service-worker/kernel"
+	"simadaservices/cmd/service-worker/rest"
 	"simadaservices/pkg/queue"
 	"simadaservices/pkg/tools"
 	"syscall"
@@ -15,18 +16,51 @@ import (
 	"github.com/adjust/rmq/v5"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
+	cron "github.com/robfig/cron/v3"
 )
 
 type Task struct{}
 
 var errChan chan error
 
+func setUpDB() {
+
+	if kernel.Kernel.Config.DB.Connection != nil {
+		sqlDb, err := kernel.Kernel.Config.DB.Connection.DB()
+		if err != nil {
+			panic(err)
+		}
+
+		err = sqlDb.Close()
+		if err != nil {
+			panic(err)
+		}
+		fmt.Println("close the database and re-creating new one")
+	}
+
+	fmt.Println("setting up database", kernel.Kernel.Config.DB)
+
+	db, err := tools.NewDatabase().GetGormConnection(
+		kernel.Kernel.Config.DB.Host,
+		kernel.Kernel.Config.DB.Port,
+		kernel.Kernel.Config.DB.User,
+		kernel.Kernel.Config.DB.Password,
+		kernel.Kernel.Config.DB.Database,
+		kernel.Kernel.Config.DB.TimeZone)
+
+	if err != nil {
+		panic(err)
+	}
+
+	kernel.Kernel.Config.DB.Connection = db
+}
+
 func setUpRedis() {
 
 	go tools.LogErrors(errChan)
 	connection, err := rmq.OpenConnection("consumer", "tcp", fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port), 1, errChan)
 	if err != nil {
-		fmt.Errorf("error", err.Error())
+		fmt.Println("error", err.Error())
 	} else {
 		kernel.Kernel.Config.REDIS.Connection = &connection
 	}
@@ -34,13 +68,30 @@ func setUpRedis() {
 }
 
 func main() {
+	// Create or open a log file for writing
+	currentTime := time.Now().Format("2006-01-02")
+	logFile, err := os.OpenFile("storage/logs/"+currentTime+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("Error opening log file:", err)
+	}
+	defer logFile.Close()
+
+	// Set the log output to the log file
+	log.SetOutput(logFile)
+
 	errChan = make(chan error, 10)
-	err := godotenv.Load()
+	err = godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}
 
 	kernel.Kernel = kernel.NewKernel()
+
+	// set scheduler berdasarkan zona waktu sesuai kebutuhan
+	jakartaTime, _ := time.LoadLocation("Asia/Jakarta")
+	scheduler := cron.New(cron.WithLocation(jakartaTime))
+	// stop scheduler tepat sebelum fungsi berakhir
+	defer scheduler.Stop()
 
 	// register nats
 	// Connect to a server
@@ -66,19 +117,34 @@ func main() {
 
 	log.Println("config receive", kernel.Kernel.Config)
 
+	setUpDB()
 	setUpRedis()
 
+	db, _ := kernel.Kernel.Config.DB.Connection.DB()
+	defer db.Close()
 	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
 
 	new(queue.QueueImportInventaris).Register(connectionRedis)
+	new(queue.QueueExportBMDATL).Register(connectionRedis)
+
+	// set task yang akan dijalankan scheduler
+	scheduler.AddFunc("27 10 * * *", func() {
+		log.Println(">>> service worker : export bmd atl scheduler")
+		// rest.NewApi().ExportBmdAtl(&gin.Context{})
+		rest.NewApi().GetBmdAtl(connectionRedis)
+	}) // SETIAP HARI PUKUL 9 malam setiap hari
+	go scheduler.Start()
+
 	fmt.Println("service worker already running")
+	fmt.Println("service cron already running")
 
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGINT)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	defer signal.Stop(signals)
 
 	<-signals // wait for signal
 	go func() {
+		fmt.Println(">>> error : hard exit on second signal (in case shutdown gets stuck")
 		<-signals // hard exit on second signal (in case shutdown gets stuck)
 		os.Exit(1)
 	}()
@@ -92,6 +158,7 @@ func main() {
 	for _, queue := range openQueues {
 		taskQueue, _ := connectionRedis.OpenQueue(queue)
 		if err != nil {
+			fmt.Println(">>> error : ", err.Error())
 			errChan <- err
 		} else {
 			readyCount, rejectedCount, err := taskQueue.Destroy()

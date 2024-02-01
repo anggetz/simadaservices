@@ -5,38 +5,19 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"simadaservices/cmd/service-transaction/kernel"
-	"simadaservices/cmd/service-transaction/rest"
-	"simadaservices/pkg/middlewares"
+	"simadaservices/cmd/service-pipeline/kernel"
+	"simadaservices/pkg/pipelines"
 	"simadaservices/pkg/tools"
 	"time"
 
-	"github.com/adjust/rmq/v5"
-	"github.com/elastic/go-elasticsearch/v8"
-	"github.com/gin-gonic/gin"
+	elasticsearch "github.com/elastic/go-elasticsearch/v8"
 	"github.com/go-redis/cache/v9"
 	"github.com/redis/go-redis/v9"
 
+	"github.com/jasonlvhit/gocron"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
 )
-
-func setupRediCache() {
-	fmt.Println("connect to", fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port))
-
-	ring := redis.NewRing(&redis.RingOptions{
-		Addrs: map[string]string{
-			"server1": fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port),
-		},
-	})
-
-	mycache := cache.New(&cache.Options{
-		Redis:      ring,
-		LocalCache: cache.NewTinyLFU(1000, time.Minute),
-	})
-
-	kernel.Kernel.Config.REDIS.Cache = mycache
-}
 
 func setupElasticDB() {
 	cfg := elasticsearch.Config{
@@ -85,21 +66,22 @@ func setUpDB() {
 	kernel.Kernel.Config.DB.Connection = db
 }
 
-func setUpRedis() {
-	errChan := make(chan error, 10)
-	go tools.LogErrors(errChan)
-	connection, err := rmq.OpenConnection("consumer", "tcp", fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port), 1, errChan)
-	if err != nil {
-		fmt.Println("error", err.Error())
-	} else {
-		fmt.Println("setting up redis connection")
-		kernel.Kernel.Config.REDIS.Connection = &connection
-	}
+func setupRediCache() {
+	ring := redis.NewRing(&redis.RingOptions{
+		Addrs: map[string]string{
+			"server1": fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port),
+		},
+	})
 
+	mycache := cache.New(&cache.Options{
+		Redis:      ring,
+		LocalCache: cache.NewTinyLFU(1000, time.Minute),
+	})
+
+	kernel.Kernel.Config.REDIS.Cache = mycache
 }
 
 func main() {
-
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -117,8 +99,7 @@ func main() {
 		}
 
 		setUpDB()
-		setUpRedis()
-		// setupElasticDB()
+		setupElasticDB()
 		setupRediCache()
 
 		log.Println("new config receive", kernel.Kernel.Config)
@@ -137,33 +118,18 @@ func main() {
 	log.Println("config receive", kernel.Kernel.Config)
 
 	setUpDB()
-	setUpRedis()
-	// setupElasticDB()
+	setupElasticDB()
 	setupRediCache()
 
-	db, _ := kernel.Kernel.Config.DB.Connection.DB()
-	defer db.Close()
+	defer func() {
+		db, _ := kernel.Kernel.Config.DB.Connection.DB()
+		db.Close()
+	}()
 
-	r := gin.Default()
+	// gocron.Every(10).Minutes().Lock().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
+	gocron.Every(10).Minutes().Do(pipelines.NewSyncInventaris().SetDB(kernel.Kernel.Config.DB.Connection).SetRedisCache(kernel.Kernel.Config.REDIS.Cache).CountInventaris)
+	// gocron.Every(6).Hour().Do(pipelines.NewSyncInventaris(kernel.Kernel.Config.ELASTIC.Client, *kernel.Kernel.Config.DB.Connection).SyncPgToElastic)
 
-	// register router
-	apiGroup := r.Group("/v1/transaction")
-	{
-		apiGroup.Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
-		apiGroupTransaction := apiGroup.Group("/inventaris")
-		{
-			apiGroupTransaction.GET("/get", rest.NewInvoiceApi().Get)
-		}
-
-		apiGroupHome := apiGroup.Group("/home")
-		{
-			apiGroupHome.GET("/get-total-aset", rest.NewHomeApi().GetTotalAset)
-			apiGroupHome.GET("/get-nilai-aset", rest.NewHomeApi().GetNilaiAsset)
-			apiGroupHome.GET("/get-nilai-aset-by-kode-jenis", rest.NewHomeApi().GetNilaiAssetByKodeJenis)
-		}
-	}
-
-	r.Run(":" + kernel.Kernel.Config.SIMADA_SV_PORT_TRANSACTION)
-
-	nc.Drain()
+	gocron.RunAll()
+	<-gocron.Start()
 }

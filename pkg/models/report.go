@@ -86,3 +86,10 @@ type ReportMDBATL struct {
 	Tahun                         int     `json:"tahun"`
 	Bulan                         string  `json:"bulan"`
 }
+
+type FileStruct struct {
+	FilePath  string
+	FileName  string
+	FileSize  float64
+	CreatedAt string
+}

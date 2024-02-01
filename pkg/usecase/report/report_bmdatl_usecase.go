@@ -18,9 +18,30 @@ func NewReportATLUseCase(db *gorm.DB) *reportATLUseCase {
 	}
 }
 
-func (i *reportATLUseCase) Get(start int, limit int, g *gin.Context) ([]models.ReportMDBATL, int64, int64, int64, interface{}, error) {
-	report := []models.ReportMDBATL{}
+func (i *reportATLUseCase) Get(start int, limit int, jenis string, g *gin.Context) ([]models.ReportMDBATL, int64, int64, int64, interface{}, error) {
+	// pidopd := ""
+	// pidopd_cabang := ""
+	// pidupt := ""
 
+	// tglawal := ""
+	// tglakhir := ""
+
+	// if g.Query("f_periode") == "1" { // bulan
+	// 	tglawal = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-01"
+	// 	tglakhir = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-31"
+	// } else if g.Query("f_periode") == "2" { // triwulan 1 (1 januari - 31 maret)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-03-31"
+	// } else if g.Query("f_periode") == "3" { // semester 1 (1 januari - 31 juni)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-06-30"
+	// } else if g.Query("f_periode") == "4" { // triwulan 3 (1 juli - 30 september)
+	// 	tglawal = g.Query("f_tahun") + "-07-01"
+	// 	tglakhir = g.Query("f_tahun") + "-09-30"
+	// } else if g.Query("f_periode") == "5" { // tahun  (1 januari - 31 desember)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-12-31"
+	// }
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
@@ -38,35 +59,44 @@ func (i *reportATLUseCase) Get(start int, limit int, g *gin.Context) ([]models.R
 		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
 	}
 
-	firstload, _ := strconv.ParseBool(g.Query("firstload"))
-	if firstload == true {
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
 		if g.Query("penggunafilter") != "" {
 			pidopd = g.Query("penggunafilter")
 		}
+	}
 
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
 		if g.Query("kuasapengguna_filter") != "" {
 			pidopd_cabang = g.Query("kuasapengguna_filter")
 		}
+	}
 
+	if g.Query("f_subkuasa_filter") != "" {
+		pidopd = g.Query("f_subkuasa_filter")
+	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
 		}
-	} else {
-		if g.Query("f_penggunafilter") != "" {
-			pidopd = g.Query("f_enggunafilter")
-		}
-
-		if g.Query("f_kuasapengguna_filter") != "" {
-			pidopd_cabang = g.Query("f_kuasapengguna_filter")
-		}
-
-		if g.Query("f_subkuasa_filter") != "" {
-			pidopd = g.Query("f_subkuasa_filter")
-		}
 	}
 
-	tahun_sk, _ := strconv.Atoi(g.Query("f_tahun"))
-	tahun_sb, _ := strconv.Atoi(g.Query("f_tahun"))
+	tahun := g.Query("f_tahun")
+	bulan := g.Query("f_bulan")
+	draw := g.Query("draw")
+
+	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenis)
+	// return i.GetData(start, limit, tglawal, tglakhir, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenis)
+}
+
+// func (i *reportATLUseCase) GetData(start int, limit int, tglawal string, tglakhir string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenis string) ([]models.ReportMDBATL, int64, int64, int64, interface{}, error) {
+func (i *reportATLUseCase) GetData(start int, limit int, tgl string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenis string) ([]models.ReportMDBATL, int64, int64, int64, interface{}, error) {
+	report := []models.ReportMDBATL{}
+
+	tahun_sk, _ := strconv.Atoi(tahun)
+	tahun_sb, _ := strconv.Atoi(tahun)
 	tahun_sb = tahun_sb - 1
 
 	// pre query
@@ -116,11 +146,21 @@ func (i *reportATLUseCase) Get(start int, limit int, g *gin.Context) ([]models.R
 		Where(`
 			(i.pidopd::text =pr.pidopd OR trim(both from pr.pidopd)='')  and
 			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from pr.pidopd_cabang)='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and
-			to_char(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal
-			and i.deleted_at is null 
-			and i.draft is null`).
+			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and 
+			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
+			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and
+			i.deleted_at is null and
+			i.draft is null`).
 		Order("i.id")
+
+	if jenis == "export" {
+		// if err := sqlQuery.Offset(start).Limit(limit).Find(&report).Error; err != nil {
+		if err := sqlQuery.Find(&report).Error; err != nil {
+			return nil, 0, 0, 1, 0, err
+		}
+
+		return report, 0, 0, 1, 0, nil
+	}
 
 	if err := sqlQuery.Offset(start).Limit(limit).Find(&report).Error; err != nil {
 		return nil, 0, 0, 1, 0, err
@@ -138,17 +178,18 @@ func (i *reportATLUseCase) Get(start int, limit int, g *gin.Context) ([]models.R
 		Where(`
 			(i.pidopd::text =pr.pidopd OR trim(both from pr.pidopd)='')  and
 			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from pr.pidopd_cabang)='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and
-			to_char(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
+			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and 
+			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
+			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
 			i.deleted_at IS NULL AND i.draft IS NULL`).
 		Scan(&countData)
 
 	var countDataFiltered int64
 	countDataFiltered = countData.Total
 
-	var draw int64
-	if g.Query("draw") != "" {
-		draw, _ = strconv.ParseInt(g.Query("draw"), 10, 64)
+	var ndraw int64
+	if draw != "" {
+		ndraw, _ = strconv.ParseInt(draw, 10, 64)
 	}
 
 	summary_perpage := models.SummaryPerPage{}
@@ -163,10 +204,33 @@ func (i *reportATLUseCase) Get(start int, limit int, g *gin.Context) ([]models.R
 		summary_perpage.NilaiBuku = summary_perpage.NilaiBuku + np.NilaiBuku
 	}
 
-	return report, countData.Total, countDataFiltered, draw, summary_perpage, nil
+	return report, countData.Total, countDataFiltered, ndraw, summary_perpage, nil
 }
 
 func (i *reportATLUseCase) GetTotalRecords(start int, limit int, g *gin.Context) (int64, error) {
+	// pidopd := ""
+	// pidopd_cabang := ""
+	// pidupt := ""
+
+	// tglawal := ""
+	// tglakhir := ""
+
+	// if g.Query("f_periode") == "1" { // bulan
+	// 	tglawal = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-01"
+	// 	tglakhir = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-31"
+	// } else if g.Query("f_periode") == "2" { // triwulan 1 (1 januari - 31 maret)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-03-31"
+	// } else if g.Query("f_periode") == "3" { // semester 1 (1 januari - 31 juni)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-06-30"
+	// } else if g.Query("f_periode") == "4" { // triwulan 3 (1 juli - 30 september)
+	// 	tglawal = g.Query("f_tahun") + "-07-01"
+	// 	tglakhir = g.Query("f_tahun") + "-09-30"
+	// } else if g.Query("f_periode") == "5" { // tahun  (1 januari - 31 desember)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-12-31"
+	// }
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
@@ -184,30 +248,27 @@ func (i *reportATLUseCase) GetTotalRecords(start int, limit int, g *gin.Context)
 		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
 	}
 
-	firstload, _ := strconv.ParseBool(g.Query("firstload"))
-	if firstload == true {
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
 		if g.Query("penggunafilter") != "" {
 			pidopd = g.Query("penggunafilter")
 		}
+	}
 
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
 		if g.Query("kuasapengguna_filter") != "" {
 			pidopd_cabang = g.Query("kuasapengguna_filter")
 		}
+	}
 
+	if g.Query("f_subkuasa_filter") != "" {
+		pidopd = g.Query("f_subkuasa_filter")
+	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
-		}
-	} else {
-		if g.Query("f_penggunafilter") != "" {
-			pidopd = g.Query("f_enggunafilter")
-		}
-
-		if g.Query("f_kuasapengguna_filter") != "" {
-			pidopd_cabang = g.Query("f_kuasapengguna_filter")
-		}
-
-		if g.Query("f_subkuasa_filter") != "" {
-			pidopd = g.Query("f_subkuasa_filter")
 		}
 	}
 
@@ -226,8 +287,9 @@ func (i *reportATLUseCase) GetTotalRecords(start int, limit int, g *gin.Context)
 		Where(`
 			(i.pidopd::text =pr.pidopd OR trim(both from '')='')  and
 			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from '')='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from '')='') and
-			to_char(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
+			(i.pidupt::text =pr.pidupt OR trim(both from '')='') and 
+			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
+			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
 			i.deleted_at IS NULL AND i.draft IS NULL`).
 		Count(&countData)
 
@@ -235,6 +297,29 @@ func (i *reportATLUseCase) GetTotalRecords(start int, limit int, g *gin.Context)
 }
 
 func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*models.SummaryPage, error) {
+	// pidopd := ""
+	// pidopd_cabang := ""
+	// pidupt := ""
+
+	// tglawal := ""
+	// tglakhir := ""
+
+	// if g.Query("f_periode") == "1" { // bulan
+	// 	tglawal = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-01"
+	// 	tglakhir = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-31"
+	// } else if g.Query("f_periode") == "2" { // triwulan 1 (1 januari - 31 maret)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-03-31"
+	// } else if g.Query("f_periode") == "3" { // semester 1 (1 januari - 31 juni)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-06-30"
+	// } else if g.Query("f_periode") == "4" { // triwulan 3 (1 juli - 30 september)
+	// 	tglawal = g.Query("f_tahun") + "-07-01"
+	// 	tglakhir = g.Query("f_tahun") + "-09-30"
+	// } else if g.Query("f_periode") == "5" { // tahun  (1 januari - 31 desember)
+	// 	tglawal = g.Query("f_tahun") + "-01-01"
+	// 	tglakhir = g.Query("f_tahun") + "-12-31"
+	// }
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
@@ -252,30 +337,27 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
 	}
 
-	firstload, _ := strconv.ParseBool(g.Query("firstload"))
-	if firstload == true {
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
 		if g.Query("penggunafilter") != "" {
 			pidopd = g.Query("penggunafilter")
 		}
+	}
 
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
 		if g.Query("kuasapengguna_filter") != "" {
 			pidopd_cabang = g.Query("kuasapengguna_filter")
 		}
+	}
 
+	if g.Query("f_subkuasa_filter") != "" {
+		pidopd = g.Query("f_subkuasa_filter")
+	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
-		}
-	} else {
-		if g.Query("f_penggunafilter") != "" {
-			pidopd = g.Query("f_enggunafilter")
-		}
-
-		if g.Query("f_kuasapengguna_filter") != "" {
-			pidopd_cabang = g.Query("f_kuasapengguna_filter")
-		}
-
-		if g.Query("f_subkuasa_filter") != "" {
-			pidopd = g.Query("f_subkuasa_filter")
 		}
 	}
 
@@ -293,7 +375,7 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 
 	// main query
 	sqlQuery := i.db.Table("detil_aset_lainnya as d").
-		Select(`count(*) jumlah,
+		Select(`count(d.id) jumlah,
 			sum(i.harga_satuan) nilai_harga_satuan,
 			sum(i.jumlah * i.harga_satuan) nilai_perolehan,
 			sum(coalesce(p.biaya,0)) nilai_atribusi,
@@ -313,9 +395,10 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 		Where(`
 			(i.pidopd::text =pr.pidopd OR trim(both from pr.pidopd)='')  and
 			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from pr.pidopd_cabang)='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and
-			to_char(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal
-			and i.deleted_at is null 
+			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and 
+			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
+			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
+			i.deleted_at is null 
 			and i.draft is null`)
 
 	summary_page := models.SummaryPage{}
@@ -324,4 +407,73 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 	}
 
 	return &summary_page, nil
+}
+
+func (i *reportATLUseCase) Export(start int, limit int, f_periode string, f_penggunafilter string, penggunafilter string, f_kuasapengguna_filter string, kuasapengguna_filter string, f_subkuasa_filter string, subkuasa_filter string, f_tahun string, f_bulan string, f_jenis string, action string, firstload string, draw string) ([]models.ReportMDBATL, int64, int64, int64, interface{}, error) {
+	// pidopd := ""
+	// pidopd_cabang := ""
+	// pidupt := ""
+
+	// tglawal := ""
+	// tglakhir := ""
+
+	// if f_periode == "1" {
+	// 	tglawal = f_tahun + "-" + f_bulan + "-01"
+	// 	tglakhir = f_tahun + "-" + f_bulan + "-31"
+	// } else if f_periode == "2" {
+	// 	tglawal = f_tahun + "-01-01"
+	// 	tglakhir = f_tahun + "-03-31"
+	// } else if f_periode == "3" {
+	// 	tglawal = f_tahun + "-01-01"
+	// 	tglakhir = f_tahun + "-06-30"
+	// } else if f_periode == "4" {
+	// 	tglawal = f_tahun + "-07-01"
+	// 	tglakhir = f_tahun + "-09-30"
+	// } else if f_periode == "5" {
+	// 	tglawal = f_tahun + "-01-01"
+	// 	tglakhir = f_tahun + "-12-31"
+	// }
+	tgl := ""
+	pidopd := ""
+	pidopd_cabang := ""
+	pidupt := ""
+
+	if f_periode == "1" {
+		tgl = f_tahun + "-" + f_bulan
+	} else if f_periode == "2" {
+		tgl = f_tahun + "-03"
+	} else if f_periode == "3" {
+		tgl = f_tahun + "-06"
+	} else if f_periode == "4" {
+		tgl = f_tahun + "-09"
+	} else if f_periode == "5" {
+		tgl = f_tahun + "-" + f_bulan
+	}
+
+	if f_penggunafilter != "" {
+		pidopd = f_penggunafilter
+	} else {
+		if penggunafilter != "" {
+			pidopd = penggunafilter
+		}
+	}
+
+	if f_kuasapengguna_filter != "" {
+		pidopd_cabang = f_kuasapengguna_filter
+	} else {
+		if kuasapengguna_filter != "" {
+			pidopd_cabang = kuasapengguna_filter
+		}
+	}
+
+	if f_subkuasa_filter != "" {
+		pidopd = f_subkuasa_filter
+	} else {
+		if subkuasa_filter != "" {
+			pidupt = subkuasa_filter
+		}
+	}
+
+	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, f_tahun, f_bulan, draw, "export")
+	// return i.GetData(start, limit, tglawal, tglakhir, pidopd, pidopd_cabang, pidupt, f_tahun, f_bulan, draw, "export")
 }

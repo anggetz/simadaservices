@@ -1,6 +1,7 @@
 package usecase
 
 import (
+	"log"
 	"simadaservices/pkg/models"
 	"strconv"
 
@@ -19,8 +20,6 @@ func NewReportRekapitulasiUseCase(db *gorm.DB) *reportRekapitulasiUseCase {
 }
 
 func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
-	inventaris := []models.ResponseRekapitulasi{}
-
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
@@ -65,8 +64,65 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 		}
 	}
 
-	tahun_sk, _ := strconv.Atoi(g.Query("f_tahun"))
-	tahun_sb, _ := strconv.Atoi(g.Query("f_tahun"))
+	tahun := g.Query("f_tahun")
+	bulan := g.Query("f_bulan")
+	draw := g.Query("draw")
+	jenisrekap := g.Query("f_jenisrekap")
+
+	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenisrekap, "")
+}
+
+func (i *reportRekapitulasiUseCase) Export(start int, limit int, f_periode string, f_penggunafilter string, penggunafilter string, f_kuasapengguna_filter string, kuasapengguna_filter string, f_subkuasa_filter string, subkuasa_filter string, f_tahun string, f_bulan string, f_jenis string, action string, firstload string, draw string, jenisrekap string) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
+	tgl := ""
+	pidopd := ""
+	pidopd_cabang := ""
+	pidupt := ""
+
+	if f_periode == "1" {
+		tgl = f_tahun + "-" + f_bulan
+	} else if f_periode == "2" {
+		tgl = f_tahun + "-03"
+	} else if f_periode == "3" {
+		tgl = f_tahun + "-06"
+	} else if f_periode == "4" {
+		tgl = f_tahun + "-09"
+	} else if f_periode == "5" {
+		tgl = f_tahun + "-" + f_bulan
+	}
+
+	if f_penggunafilter != "" {
+		pidopd = f_penggunafilter
+	} else {
+		if penggunafilter != "" {
+			pidopd = penggunafilter
+		}
+	}
+
+	if f_kuasapengguna_filter != "" {
+		pidopd_cabang = f_kuasapengguna_filter
+	} else {
+		if kuasapengguna_filter != "" {
+			pidopd_cabang = kuasapengguna_filter
+		}
+	}
+
+	if f_subkuasa_filter != "" {
+		pidopd = f_subkuasa_filter
+	} else {
+		if subkuasa_filter != "" {
+			pidupt = subkuasa_filter
+		}
+	}
+
+	log.Println(tgl, pidopd, pidopd_cabang, pidupt, f_tahun, f_bulan, draw, jenisrekap)
+	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, f_tahun, f_bulan, draw, jenisrekap, "export")
+}
+
+func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenisrekap string, jenis string) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
+	inventaris := []models.ResponseRekapitulasi{}
+
+	tahun_sk, _ := strconv.Atoi(tahun)
+	tahun_sb, _ := strconv.Atoi(tahun)
 	tahun_sb = tahun_sb - 1
 
 	// pre query
@@ -80,28 +136,28 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 	sqlQuery := i.db.Table("reportrekap")
 
 	// get the filter
-	if g.Query("f_jenisrekap") == "1" {
+	if jenisrekap == "1" {
 		sqlQuery = sqlQuery.
 			Select(`b.nama_rek_aset nama_barang, reportrekap.kode_jenis as kode_barang, COALESCE(SUM(reportrekap.jumlah), 0) AS jumlah, COALESCE(SUM(reportrekap.nilai_perolehan), 0) AS nilai_perolehan, 
 				COALESCE(SUM(pe.biaya), 0) AS nilai_atribusi, COALESCE(SUM(reportrekap.nilai_perolehan), 0) + COALESCE(SUM(pe.biaya), 0) AS nilai_perolehan_setelah_atribusi, 
 				CAST(SUM(COALESCE(p.penyusutan_sd_tahun_sekarang, 0)) AS NUMERIC) AS akumulasi_penyusutan, CAST(SUM(COALESCE(p.nilai_buku, 0)) AS NUMERIC) AS nilai_buku`).
 			Joins("CROSS JOIN (?) pr", params).
 			Joins("join m_barang b ON CONCAT_WS('.', b.kode_akun, b.kode_kelompok, b.kode_jenis) = reportrekap.kode_jenis AND b.kode_objek IS NULL AND b.kode_jenis IS NOT NULL")
-	} else if g.Query("jenisrekap") == "2" {
+	} else if jenisrekap == "2" {
 		sqlQuery = sqlQuery.
 			Select(`b.nama_rek_aset nama_barang, reportrekap.kode_objek as kode_barang, COALESCE(SUM(reportrekap.jumlah), 0) AS jumlah, COALESCE(SUM(reportrekap.nilai_perolehan), 0) AS nilai_perolehan, 
 				COALESCE(SUM(pe.biaya), 0) AS nilai_atribusi, COALESCE(SUM(reportrekap.nilai_perolehan), 0) + COALESCE(SUM(pe.biaya), 0) AS nilai_perolehan_setelah_atribusi, 
 				CAST(SUM(COALESCE(p.penyusutan_sd_tahun_sekarang, 0)) AS NUMERIC) AS akumulasi_penyusutan, CAST(SUM(COALESCE(p.nilai_buku, 0)) AS NUMERIC) AS nilai_buku`).
 			Joins("CROSS JOIN (?) pr", params).
 			Joins("join m_barang b ON CONCAT_WS('.', b.kode_akun, b.kode_kelompok, b.kode_jenis, b.kode_objek) = reportrekap.kode_objek AND b.kode_rincian_objek IS NULL")
-	} else if g.Query("jenisrekap") == "3" {
+	} else if jenisrekap == "3" {
 		sqlQuery = sqlQuery.
 			Select(`b.nama_rek_aset nama_barang, reportrekap.kode_rincian_objek as kode_barang, COALESCE(SUM(reportrekap.jumlah), 0) AS jumlah, COALESCE(SUM(reportrekap.nilai_perolehan), 0) AS nilai_perolehan, 
 				COALESCE(SUM(pe.biaya), 0) AS nilai_atribusi, COALESCE(SUM(reportrekap.nilai_perolehan), 0) + COALESCE(SUM(pe.biaya), 0) AS nilai_perolehan_setelah_atribusi, 
 				CAST(SUM(COALESCE(p.penyusutan_sd_tahun_sekarang, 0)) AS NUMERIC) AS akumulasi_penyusutan, CAST(SUM(COALESCE(p.nilai_buku, 0)) AS NUMERIC) AS nilai_buku`).
 			Joins("CROSS JOIN (?) pr", params).
 			Joins("join m_barang b ON CONCAT_WS('.', b.kode_akun, b.kode_kelompok, b.kode_jenis, b.kode_objek, b.kode_rincian_objek) = reportrekap.kode_rincian_objek AND b.kode_sub_rincian_objek IS NULL")
-	} else if g.Query("jenisrekap") == "4" {
+	} else if jenisrekap == "4" {
 		sqlQuery = sqlQuery.
 			Select(`b.nama_rek_aset nama_barang, reportrekap.kode_sub_rincian_objek as kode_barang, COALESCE(SUM(reportrekap.jumlah), 0) AS jumlah, COALESCE(SUM(reportrekap.nilai_perolehan), 0) AS nilai_perolehan, 
 				COALESCE(SUM(pe.biaya), 0) AS nilai_atribusi, COALESCE(SUM(reportrekap.nilai_perolehan), 0) + COALESCE(SUM(pe.biaya), 0) AS nilai_perolehan_setelah_atribusi, 
@@ -120,14 +176,23 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 				AND TO_CHAR(reportrekap.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal 
 				AND reportrekap.draft is null `)
 
-	if g.Query("f_jenisrekap") == "1" {
+	if jenisrekap == "1" {
 		sqlQuery = sqlQuery.Group("b.nama_rek_aset, reportrekap.kode_jenis ").Order("reportrekap.kode_jenis")
-	} else if g.Query("f_jenisrekap") == "2" {
+	} else if jenisrekap == "2" {
 		sqlQuery = sqlQuery.Group("b.nama_rek_aset, reportrekap.kode_objek ").Order("reportrekap.kode_objek")
-	} else if g.Query("f_jenisrekap") == "3" {
+	} else if jenisrekap == "3" {
 		sqlQuery = sqlQuery.Group("b.nama_rek_aset, reportrekap.kode_rincian_objek ").Order("reportrekap.kode_rincian_objek")
-	} else if g.Query("f_jenisrekap") == "4" {
+	} else if jenisrekap == "4" {
 		sqlQuery = sqlQuery.Group("b.nama_rek_aset, reportrekap.kode_sub_rincian_objek ").Order("reportrekap.kode_sub_rincian_objek")
+	}
+
+	if jenis == "export" {
+		// if err := sqlQuery.Offset(start).Limit(limit).Find(&report).Error; err != nil {
+		if err := sqlQuery.Find(&inventaris).Error; err != nil {
+			return nil, 0, 0, 1, 0, err
+		}
+
+		return inventaris, 0, 0, 1, 0, nil
 	}
 
 	sqlQuery = sqlQuery.Offset(start).Limit(limit)
@@ -145,9 +210,9 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 	var countDataFiltered int64
 	countDataFiltered = countData
 
-	var draw int64
-	if g.Query("draw") != "" {
-		draw, _ = strconv.ParseInt(g.Query("draw"), 10, 64)
+	var ndraw int64
+	if draw != "" {
+		ndraw, _ = strconv.ParseInt(draw, 10, 64)
 	}
 
 	summary_perpage := models.SummaryPerPage{}
@@ -159,7 +224,7 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 		summary_perpage.NilaiBuku = summary_perpage.NilaiBuku + np.NilaiBuku
 	}
 
-	return inventaris, countData, countDataFiltered, draw, summary_perpage, nil
+	return inventaris, countData, countDataFiltered, ndraw, summary_perpage, nil
 }
 
 func (i *reportRekapitulasiUseCase) GetTotal(start int, limit int, g *gin.Context) (*models.SummaryPage, error) {

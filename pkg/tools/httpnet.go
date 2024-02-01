@@ -16,3 +16,13 @@ type HttpResponseReport struct {
 	SummaryPerPage  interface{} `json:"summary_perpage"`
 	SummaryPage     interface{} `json:"summary_page"`
 }
+
+type Response struct {
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
+
+type NotOkResponse struct {
+	Message string      `json:"message"`
+	Data    interface{} `json:"data"`
+}
