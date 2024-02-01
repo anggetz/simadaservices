@@ -87,7 +87,7 @@ func (m *middlewareAuth) TokenValidate(ctx *gin.Context) {
 
 	ctx.Set("token_info", claims)
 	if !token.Response {
-		fmt.Println("error get claim token", err.Error())
+		fmt.Println("error get claim token", token)
 		ctx.JSON(401, "Unauthorized")
 		ctx.Abort()
 		return
