@@ -37,7 +37,9 @@ func (hu *homeUseCaseImpl) GetTotalAset(tokenInfo jwt.MapClaims) (int64, error) 
 		return 0, err
 	}
 
-	whereClauseAccess := buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
+	whereClauseAccess := []string{}
+
+	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
 	whereClauseAktifInventaris := buildInventarisAktifWhereClauseString()
 
@@ -62,7 +64,9 @@ func (hu *homeUseCaseImpl) GetNilaiAsset(tokenInfo jwt.MapClaims) (float64, erro
 		return 0, err
 	}
 
-	whereClauseAccess := buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
+	whereClauseAccess := []string{}
+
+	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
 	whereClauseAktifInventaris := buildInventarisAktifWhereClauseString()
 
@@ -89,8 +93,9 @@ func (hu *homeUseCaseImpl) GetNilaiAssetGroupByKodeJenis(tokenInfo jwt.MapClaims
 	if err != nil {
 		return modelTotal, err
 	}
+	whereClauseAccess := []string{}
 
-	whereClauseAccess := buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
+	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
 	whereClauseAktifInventaris := buildInventarisAktifWhereClauseString()
 

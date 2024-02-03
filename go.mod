@@ -8,6 +8,7 @@ require (
 	github.com/elastic/go-elasticsearch/v8 v8.12.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-redis/cache/v9 v9.0.0
+	github.com/gorilla/schema v1.2.1
 	github.com/jasonlvhit/gocron v0.0.1
 	github.com/joho/godotenv v1.5.1
 	github.com/nats-io/nats.go v1.31.0
