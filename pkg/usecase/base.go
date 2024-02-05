@@ -33,7 +33,7 @@ func buildInventarisAktifWhereClauseString() []string {
 	return whereClauseAccess
 }
 
-func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiLoggedIn *models.Organisasi) []string {
+func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiLoggedIn *models.Organisasi) (*gorm.DB, []string) {
 
 	whereClauseAccess := []string{}
 
@@ -45,14 +45,14 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 
 		sqlOrgLevel1 := dbgorm.Find(&level1Orgs, fmt.Sprintf("pid = %v", organisasiLoggedIn.ID))
 		if sqlOrgLevel1.Error != nil {
-			return whereClauseAccess
+			return sql, whereClauseAccess
 		}
 
 		for _, org := range level1Orgs {
 			level2Orgs := []models.Organisasi{}
 			sqlOrgLevel2 := dbgorm.Find(&level2Orgs, fmt.Sprintf("pid = %v", org.ID))
 			if sqlOrgLevel2.Error != nil {
-				return whereClauseAccess
+				return sql, whereClauseAccess
 			}
 			for _, org2 := range level1Orgs {
 				idsOrg = append(idsOrg, org2.ID)
@@ -76,9 +76,9 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 			)
 		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
 
-		sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	} else if organisasiLoggedIn.Level == 1 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
@@ -87,16 +87,16 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
 	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
 
-		sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	} else if organisasiLoggedIn.Level == 2 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
 
-		sql.
-			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		sql = sql.
+			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	}
-	return whereClauseAccess
+	return sql, whereClauseAccess
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"simadaservices/pkg/models"
+	"strconv"
 	"strings"
 	"time"
 
@@ -19,6 +20,7 @@ import (
 
 type InvoiceUseCase interface {
 	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
+	GetPemeliharaanInventaris(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	SetDB(*gorm.DB) InvoiceUseCase
 	SetRedisCache(*cache.Cache) InvoiceUseCase
@@ -42,6 +44,143 @@ func (i *invoiceUseCaseImpl) SetDB(db *gorm.DB) InvoiceUseCase {
 func (i *invoiceUseCaseImpl) SetRedisCache(redisCache *cache.Cache) InvoiceUseCase {
 	i.redisCache = redisCache
 	return i
+}
+
+type getPemeliharaanInventaris struct {
+	*models.Inventaris
+	NamaOpd       string `json:"nama_opd"`
+	NamaOpdCabang string `json:"nama_opd_cabang"`
+	NamaUpt       string `json:"nama_upt"`
+	NamaRekAset   string `json:"nama_rek_aset"`
+	Alamat        string `json:"alamat"`
+}
+
+func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
+
+	resp := []getPemeliharaanInventaris{}
+
+	organisasiLoggedIn := models.Organisasi{}
+
+	t, _ := g.Get("token_info")
+
+	// get organisasi
+	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", t.(jwt.MapClaims)["org_id"]))
+	if sqlOrgTx.Error != nil {
+		return nil, 0, 0, sqlOrgTx.Error
+	}
+
+	whereClause := []string{}
+
+	if g.Query("f_opd_filter") != "" {
+		fmt.Println("here donk", g.Query("f_opd_filter"))
+		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidopd = %s", g.Query("f_opd_filter")))
+	}
+
+	if g.Query("f_jenis_filter") != "" {
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", g.Query("f_jenis_filter")))
+	}
+
+	if g.Query("q") != "" {
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.nama_rek_aset like '%"+g.Query("f_jenis_filter")+"%' OR organisasi_pengguna.nama  like '%"+g.Query("f_jenis_filter")+"%'"))
+	}
+
+	sql := i.db.Model(new(models.Inventaris))
+
+	whereAccessClause := []string{}
+
+	sql, whereAccessClause = buildInventarisWhereClauseString(sql, i.db, &organisasiLoggedIn)
+
+	whereClauseAktif := buildInventarisAktifWhereClauseString()
+
+	whereClause = append(whereClause, whereAccessClause...)
+
+	whereClause = append(whereClause, whereClauseAktif...)
+
+	var countData struct {
+		Total int64
+	}
+
+	sqlCount := sql.
+		Where(strings.Join(whereAccessClause, " AND "))
+
+	redisCountAllKey := "inventaris-count-all"
+
+	if organisasiLoggedIn.Level > 0 {
+		redisCountAllKey = redisCountAllKey + "-" + strconv.Itoa(organisasiLoggedIn.ID)
+	}
+
+	err := i.redisCache.Get(context.TODO(), redisCountAllKey, &countData.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	if err == cache.ErrCacheMiss || countData.Total == 0 {
+		sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
+
+		if sqlTxCount.Error != nil {
+			return nil, 0, 0, sqlCount.Error
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   redisCountAllKey,
+			Value: countData.Total,
+			TTL:   time.Minute * 10,
+		})
+	}
+
+	sql = sql.
+		Where(strings.Join(whereClause, " AND ")).
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang")
+
+	sqlCountFiltered := sql
+
+	var countDataFiltered struct {
+		Total int64
+	}
+
+	err = i.redisCache.Get(context.TODO(), "pemeliharaan-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+	if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
+		sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
+
+		if sqlTxCountFiltered.Error != nil {
+			return nil, 0, 0, sqlCountFiltered.Error
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   strings.Join(whereClause, " AND "),
+			Value: countDataFiltered.Total,
+			TTL:   time.Minute * 10,
+		})
+
+	}
+
+	if organisasiLoggedIn.Level == 2 {
+		sql = sql.
+			Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang")
+	}
+
+	sql = sql.Select([]string{
+		"inventaris.*",
+		"organisasi_pengguna.nama as nama_opd",
+		"organisasi_kuasa_pengguna.nama as nama_opd_cabang",
+		"organisasi_sub_kuasa_pengguna.nama as nama_upt",
+		"m_barang.nama_rek_aset",
+		"m_kota.nama as alamat",
+	}).Joins("join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
+
+	txData := sql.
+		Offset(start).
+		Limit(limit).Find(&resp)
+
+	return &resp, countDataFiltered.Total, countData.Total, txData.Error
 }
 
 type getInvoiceResponse struct {
@@ -337,6 +476,8 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		return inventaris, 0, 0, sqlOrgTx.Error
 	}
 
+	fmt.Println("check user level", organisasiLoggedIn.Level)
+
 	if organisasiLoggedIn.Level == 0 {
 		idsOrg := []int{}
 
@@ -376,7 +517,7 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			)
 		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
 
-		sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		sql = sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
 			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
 			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
@@ -387,34 +528,38 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
 	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
 
-		sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	} else if organisasiLoggedIn.Level == 2 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
 
-		sql.
-			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		sql = sql.
+			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	}
+
+	sql = sql.Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi")
 
 	// get count filtered
 	sqlCount := sql.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClauseAccess, " AND ")).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Where(strings.Join(whereClauseAccess, " AND "))
 
 	var countData struct {
 		Total int64
 	}
 
-	err := i.redisCache.Get(context.TODO(), "inventaris-count-all", &countData.Total)
+	redisCountAllKey := "inventaris-count-all"
+
+	if organisasiLoggedIn.Level > 0 {
+		redisCountAllKey = redisCountAllKey + "-" + strconv.Itoa(organisasiLoggedIn.ID)
+	}
+
+	err := i.redisCache.Get(context.TODO(), redisCountAllKey, &countData.Total)
 	if err != nil && err != cache.ErrCacheMiss {
 
 		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
@@ -426,32 +571,32 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		if sqlTxCount.Error != nil {
 			return nil, 0, 0, sqlCount.Error
 		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   redisCountAllKey,
+			Value: countData.Total,
+			TTL:   time.Minute * 10,
+		})
 	}
 
 	whereClause = append(whereClause, whereClauseAccess...)
+
 	// get count filtered
 	sqlCountFiltered := sql.
 		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClause, " AND ")).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Where(strings.Join(whereClause, " AND "))
 
 	var countDataFiltered struct {
 		Total int64
 	}
 
 	// get from cache
-	err = i.redisCache.Get(context.TODO(), strings.Join(whereClause, " AND "), &countDataFiltered.Total)
+	err = i.redisCache.Get(context.TODO(), "inventaris-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
 	if err != nil && err != cache.ErrCacheMiss {
 
 		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
 	}
-
-	fmt.Println("check redis error", err, countDataFiltered.Total)
 
 	if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
 		sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
@@ -474,8 +619,6 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	}
 
 	sqlTx := sql.
-		Offset(start).
-		Limit(limit).
 		Select([]string{
 			"inventaris.*",
 			"m_barang.nama_rek_aset",
@@ -483,10 +626,10 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			"m_jenis_barang.nama as jenis",
 			"m_organisasi.nama as pengguna_barang",
 		}).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
-		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi").
-		Find(&inventaris, strings.Join(whereClause, " AND "))
+		Where(strings.Join(whereClause, " AND ")).
+		Offset(start).
+		Limit(limit).
+		Find(&inventaris)
 
 	for ind, _ := range inventaris {
 

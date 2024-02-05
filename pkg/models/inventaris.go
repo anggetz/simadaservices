@@ -8,7 +8,7 @@ type Inventaris struct {
 	ID                  int               `json:"id"`
 	Noreg               string            `json:"noreg"`
 	Pidbarang           int               `json:"pidbarang"`
-	PIDOpd              int               `json:"pidopd"`
+	Pidopd              int               `json:"pidopd"`
 	PIDLokasi           int               `json:"pidlokasi"`
 	TglSensus           *time.Time        `json:"tgl_sensus"`
 	Volume              int               `json:"volume"`
@@ -25,8 +25,8 @@ type Inventaris struct {
 	TglDibukukan        *time.Time        `json:"tgl_dibukukan"`
 	Satuan              int               `json:"satuan"`
 	DeletedAt           *time.Time        `json:"deleted_at"`
-	PIDOPDCabang        int               `json:"pidopd_cabang"`
-	PIDUpt              int               `json:"pid_upt"`
+	PidopdCabang        int               `json:"pidopd_cabang"`
+	PidUpt              int               `json:"pid_upt"`
 	KodeLokasi          string            `json:"kode_lokasi"`
 	AlamatPropinsi      int               `json:"alamat_propinsi"`
 	AlamatKota          int               `json:"alamat_kota"`

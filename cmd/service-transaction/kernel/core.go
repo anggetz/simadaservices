@@ -36,6 +36,7 @@ type Config struct {
 	DB                         dbConfig
 	REDIS                      redisConfig
 	ELASTIC                    elasticConfig
+	JwtKey                     string
 }
 
 type core struct {
