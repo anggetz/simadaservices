@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/adjust/rmq/v5"
+	"github.com/go-redis/cache/v9"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
@@ -19,6 +20,7 @@ type TaskExportRekapitulasi struct {
 	rmq.Consumer
 	Payload TaskExportRekapitulasiPayload
 	DB      *gorm.DB
+	Redis   *cache.Cache
 }
 
 type TaskExportRekapitulasiPayload struct {
@@ -28,7 +30,7 @@ type TaskExportRekapitulasiPayload struct {
 
 const (
 	REKAPITULASI_EXCEL_FILE_FOLDER = "Rekapitulasi"
-	REKAPITULASI_FORMAT_FILE_TIME  = "2006.01.02_15.04.05"
+	REKAPITULASI_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
 )
 
 type QueryParamsRekapitulasi struct {
@@ -45,13 +47,13 @@ type QueryParamsRekapitulasi struct {
 	Kuasapengguna_Filter   string `form:"kuasapengguna_filter"`
 	Subkuasa_Filter        string `form:"subkuasa_filter"`
 	Draw                   string `form:"draw"`
-	JenisRekap             string `form:"f_jenisrekap"`
+	F_Jenisrekap           string `form:"f_jenisrekap"`
 }
 
 func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	var err error
 
-	fmt.Println("performing task")
+	fmt.Println("performing task report rekapitulasi")
 
 	// get params
 	var params QueryParamsRekapitulasi
@@ -68,9 +70,9 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
 	report := []models.ResponseRekapitulasi{}
-	report, _, _, _, _, err = usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
+	report, _, _, _, _, err = usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
 		params.Penggunafilter, params.F_Kuasapengguna_Filter, params.Kuasapengguna_Filter, params.F_Subkuasa_Filter, params.Subkuasa_Filter,
-		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw, params.JenisRekap)
+		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw, params.F_Jenisrekap)
 	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
 
 	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().String())
@@ -149,8 +151,13 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	timestr := t.DB.NowFunc().Format(REKAPITULASI_FORMAT_FILE_TIME)
 	folderPath := os.Getenv("FOLDER_REPORT")
 	folderReport := REKAPITULASI_EXCEL_FILE_FOLDER
-	os.MkdirAll(folderReport, os.ModePerm)
-	fileName := opdname.Pengguna + "_" + opdname.KuasaPengguna + "_" + opdname.SubKuasaPengguna + "_" + timestr
+	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
+	fileName := ""
+	if opdname.Pengguna == "" && opdname.KuasaPengguna == "" {
+		fileName = "Rekapitulasi " + timestr
+	} else {
+		fileName = opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + " " + timestr
+	}
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
 		err = d.Reject()

@@ -11,6 +11,7 @@ import (
 	"strconv"
 
 	"github.com/adjust/rmq/v5"
+	"github.com/go-redis/cache/v9"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
@@ -19,6 +20,7 @@ type TaskExportBMDATL struct {
 	rmq.Consumer
 	Payload TaskExportBMDATLPayload
 	DB      *gorm.DB
+	Redis   *cache.Cache
 }
 
 type TaskExportBMDATLPayload struct {
@@ -28,7 +30,7 @@ type TaskExportBMDATLPayload struct {
 
 const (
 	ATL_EXCEL_FILE_FOLDER = "BMD_ATL"
-	ATL_FORMAT_FILE_TIME  = "2006.01.02_15.04.05"
+	ATL_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
 )
 
 type QueryParamsAtl struct {
@@ -67,7 +69,7 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
 	report := []models.ReportMDBATL{}
-	report, _, _, _, _, err = usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
+	report, _, _, _, _, err = usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
 		params.Penggunafilter, params.F_Kuasapengguna_Filter, params.Kuasapengguna_Filter, params.F_Subkuasa_Filter, params.Subkuasa_Filter,
 		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw)
 	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
@@ -180,8 +182,8 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 	timestr := t.DB.NowFunc().Format(ATL_FORMAT_FILE_TIME)
 	folderPath := os.Getenv("FOLDER_REPORT")
 	folderReport := ATL_EXCEL_FILE_FOLDER
-	os.MkdirAll(folderReport, os.ModePerm)
-	fileName := opdname.Pengguna + "_" + opdname.KuasaPengguna + "_" + opdname.SubKuasaPengguna + "_" + timestr
+	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
+	fileName := opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + " " + timestr
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
 		err = d.Reject()

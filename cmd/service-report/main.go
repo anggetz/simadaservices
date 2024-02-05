@@ -13,8 +13,10 @@ import (
 
 	"github.com/adjust/rmq/v5"
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/cache/v9"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
+	"github.com/redis/go-redis/v9"
 )
 
 func setUpDB() {
@@ -62,6 +64,23 @@ func setUpRedis() {
 
 }
 
+func setupRediCache() {
+	fmt.Println("connect to", fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port))
+
+	ring := redis.NewRing(&redis.RingOptions{
+		Addrs: map[string]string{
+			"server1": fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port),
+		},
+	})
+
+	mycache := cache.New(&cache.Options{
+		Redis:      ring,
+		LocalCache: cache.NewTinyLFU(1000, time.Minute),
+	})
+
+	kernel.Kernel.Config.REDIS.Cache = mycache
+}
+
 func main() {
 	// Create or open a log file for writing
 	currentTime := time.Now().Format("2006-01-02")
@@ -106,6 +125,8 @@ func main() {
 
 	setUpRedis()
 	setUpDB()
+	setupRediCache()
+
 	db, _ := kernel.Kernel.Config.DB.Connection.DB()
 	defer db.Close()
 
@@ -114,6 +135,8 @@ func main() {
 	// register router
 	apiGroup := r.Group("/v1/report").Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
 	apiGroup.GET("/get-inventaris", rest.NewApi().GetInventaris)
+
+	// rekapitulasi
 	apiGroup.GET("/get-rekapitulasi", rest.NewApi().GetRekapitulasi)
 	apiGroup.GET("/get-total-rekapitulasi", rest.NewApi().GetTotalRekapitulasi)
 	apiGroup.GET("/export-rekapitulasi", rest.NewApi().ExportRekapitulasi)
@@ -121,7 +144,6 @@ func main() {
 	// bmdatl
 	apiGroup.GET("/get-bmdatl", rest.NewApi().GetBmdAtl)
 	apiGroup.GET("/export-bmdatl", rest.NewApi().ExportBmdAtl)
-	apiGroup.GET("/get-bmdatl-totalrecords", rest.NewApi().GetBmdAtlTotalRecords)
 	apiGroup.GET("/get-total-bmdatl", rest.NewApi().GetTotalBmdAtl)
 
 	// FILE EXPORT

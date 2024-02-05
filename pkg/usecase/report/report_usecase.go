@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"simadaservices/pkg/models"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -106,7 +107,7 @@ func (i *reportUseCase) GetOpdName(c string) OpdName {
 
 func (i *reportUseCase) GetPengguna() ([]models.Organisasi, error) {
 	pengguna := []models.Organisasi{}
-	if err := i.db.Find(&pengguna).Where("level = ?", "0").Error; err != nil {
+	if err := i.db.Find(&pengguna).Where("level = ?", 0).Error; err != nil {
 		return nil, err
 	}
 	return pengguna, nil
@@ -159,12 +160,13 @@ func (i *reportUseCase) DeleteFileExport(g *gin.Context) error {
 	return nil
 }
 
-func (i *reportUseCase) GetTotalOpd(g *gin.Context) ([]models.Organisasi, int64, error) {
+func (i *reportUseCase) GetTotalOpd(penggunafilter string) ([]models.Organisasi, int64, error) {
 	// jika opd_cabang kosong maka cek data untuk memecah export
 	var totalOpd int64
 	opd := []models.Organisasi{}
 	// check opd have opd_cabang ?
-	if err := i.db.Model(&models.Organisasi{}).Where("pid = ?", g.Query("f_penggunafilter")).
+	pid, _ := strconv.Atoi(penggunafilter)
+	if err := i.db.Model(&models.Organisasi{}).Where("pid = ?", pid).
 		Find(&opd).
 		Count(&totalOpd).Error; err != nil {
 		return nil, 0, err

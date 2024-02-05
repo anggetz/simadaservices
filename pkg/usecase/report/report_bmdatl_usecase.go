@@ -1,20 +1,27 @@
 package usecase
 
 import (
+	"context"
+	"fmt"
+	"log"
 	"simadaservices/pkg/models"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/cache/v9"
 	"gorm.io/gorm"
 )
 
 type reportATLUseCase struct {
-	db *gorm.DB
+	db         *gorm.DB
+	redisCache *cache.Cache
 }
 
-func NewReportATLUseCase(db *gorm.DB) *reportATLUseCase {
+func NewReportATLUseCase(db *gorm.DB, redisCache *cache.Cache) *reportATLUseCase {
 	return &reportATLUseCase{
-		db: db,
+		db:         db,
+		redisCache: redisCache,
 	}
 }
 
@@ -171,18 +178,41 @@ func (i *reportATLUseCase) GetData(start int, limit int, tgl string, pidopd stri
 	}
 
 	// get count filtered
-	i.db.Table("detil_aset_lainnya d").
+	strWhere := fmt.Sprintf(`
+		(i.pidopd::text = '%s' OR trim(both from '%s')='')  and
+		(i.pidopd_cabang::text = '%s' OR trim(both from '%s')='') and
+		(i.pidupt::text = '%s' OR trim(both from '%s')='') and
+		TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= '%s' and
+		i.deleted_at IS NULL AND i.draft IS NULL`, pidopd, pidopd, pidopd_cabang, pidopd_cabang, pidupt, pidupt, tgl)
+
+	sqlCountFiltered := i.db.Table("detil_aset_lainnya d").
 		Select("count(d.id) as total").
 		Joins("JOIN inventaris i ON i.id = d.pidinventaris").
-		Joins("CROSS JOIN (?) pr ", params).
-		Where(`
-			(i.pidopd::text =pr.pidopd OR trim(both from pr.pidopd)='')  and
-			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from pr.pidopd_cabang)='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and 
-			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
-			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
-			i.deleted_at IS NULL AND i.draft IS NULL`).
-		Scan(&countData)
+		Where(strWhere)
+
+	// get from cache
+	err := i.redisCache.Get(context.TODO(), "bmd-atl-count"+strWhere, &countData.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+
+		return nil, 0, 0, 1, 0, err
+	}
+
+	log.Println("check redis error", err, countData.Total)
+
+	if err == cache.ErrCacheMiss || countData.Total == 0 {
+		sqlTxCountFiltered := sqlCountFiltered.Scan(&countData)
+
+		if sqlTxCountFiltered.Error != nil {
+			return nil, 0, 0, 1, 0, sqlTxCountFiltered.Error
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   "bmd-atl-count" + strWhere,
+			Value: countData.Total,
+			TTL:   time.Minute * 10,
+		})
+	}
 
 	var countDataFiltered int64
 	countDataFiltered = countData.Total
@@ -205,95 +235,6 @@ func (i *reportATLUseCase) GetData(start int, limit int, tgl string, pidopd stri
 	}
 
 	return report, countData.Total, countDataFiltered, ndraw, summary_perpage, nil
-}
-
-func (i *reportATLUseCase) GetTotalRecords(start int, limit int, g *gin.Context) (int64, error) {
-	// pidopd := ""
-	// pidopd_cabang := ""
-	// pidupt := ""
-
-	// tglawal := ""
-	// tglakhir := ""
-
-	// if g.Query("f_periode") == "1" { // bulan
-	// 	tglawal = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-01"
-	// 	tglakhir = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-31"
-	// } else if g.Query("f_periode") == "2" { // triwulan 1 (1 januari - 31 maret)
-	// 	tglawal = g.Query("f_tahun") + "-01-01"
-	// 	tglakhir = g.Query("f_tahun") + "-03-31"
-	// } else if g.Query("f_periode") == "3" { // semester 1 (1 januari - 31 juni)
-	// 	tglawal = g.Query("f_tahun") + "-01-01"
-	// 	tglakhir = g.Query("f_tahun") + "-06-30"
-	// } else if g.Query("f_periode") == "4" { // triwulan 3 (1 juli - 30 september)
-	// 	tglawal = g.Query("f_tahun") + "-07-01"
-	// 	tglakhir = g.Query("f_tahun") + "-09-30"
-	// } else if g.Query("f_periode") == "5" { // tahun  (1 januari - 31 desember)
-	// 	tglawal = g.Query("f_tahun") + "-01-01"
-	// 	tglakhir = g.Query("f_tahun") + "-12-31"
-	// }
-	tgl := ""
-	pidopd := ""
-	pidopd_cabang := ""
-	pidupt := ""
-
-	if g.Query("f_periode") == "1" {
-		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
-	} else if g.Query("f_periode") == "2" {
-		tgl = g.Query("f_tahun") + "-03"
-	} else if g.Query("f_periode") == "3" {
-		tgl = g.Query("f_tahun") + "-06"
-	} else if g.Query("f_periode") == "4" {
-		tgl = g.Query("f_tahun") + "-09"
-	} else if g.Query("f_periode") == "5" {
-		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
-	}
-
-	if g.Query("f_penggunafilter") != "" {
-		pidopd = g.Query("f_penggunafilter")
-	} else {
-		if g.Query("penggunafilter") != "" {
-			pidopd = g.Query("penggunafilter")
-		}
-	}
-
-	if g.Query("f_kuasapengguna_filter") != "" {
-		pidopd_cabang = g.Query("f_kuasapengguna_filter")
-	} else {
-		if g.Query("kuasapengguna_filter") != "" {
-			pidopd_cabang = g.Query("kuasapengguna_filter")
-		}
-	}
-
-	if g.Query("f_subkuasa_filter") != "" {
-		pidopd = g.Query("f_subkuasa_filter")
-	} else {
-		if g.Query("subkuasa_filter") != "" {
-			pidupt = g.Query("subkuasa_filter")
-		}
-	}
-
-	tahun_sk, _ := strconv.Atoi(g.Query("f_tahun"))
-	tahun_sb, _ := strconv.Atoi(g.Query("f_tahun"))
-	tahun_sb = tahun_sb - 1
-
-	params := i.db.Raw(`select ? tahun_sekarang, ? tahun_sebelum, ?::text tanggal, ?::text pidopd, ?::text pidopd_cabang, ?::text pidupt`, tahun_sk, tahun_sb, tgl, pidopd, pidopd_cabang, pidupt)
-
-	var countData int64
-
-	// get count filtered
-	i.db.Table("detil_aset_lainnya d").
-		Joins("JOIN inventaris i ON i.id = d.pidinventaris").
-		Joins("CROSS JOIN (?) pr ", params).
-		Where(`
-			(i.pidopd::text =pr.pidopd OR trim(both from '')='')  and
-			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from '')='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from '')='') and 
-			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
-			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
-			i.deleted_at IS NULL AND i.draft IS NULL`).
-		Count(&countData)
-
-	return countData, nil
 }
 
 func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*models.SummaryPage, error) {
@@ -365,13 +306,23 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 	tahun_sb, _ := strconv.Atoi(g.Query("f_tahun"))
 	tahun_sb = tahun_sb - 1
 
+	summary_page := models.SummaryPage{}
+
 	// pre query
-	params := i.db.Raw(`select ? tahun_sekarang, ? tahun_sebelum, ?::text tanggal, ?::text pidopd, ?::text pidopd_cabang, ?::text pidupt`, tahun_sk, tahun_sb, tgl, pidopd, pidopd_cabang, pidupt)
+	// params := i.db.Raw(`select ? tahun_sekarang, ? tahun_sebelum, ?::text tanggal, ?::text pidopd, ?::text pidopd_cabang, ?::text pidupt`, tahun_sk, tahun_sb, tgl, pidopd, pidopd_cabang, pidupt)
 	penyusutan := i.db.Raw(`select inventaris_id, sum(penyusutan_sd_tahun_sekarang) penyusutan_sd_tahun_sekarang,
 	sum(beban_penyusutan) beban_penyusutan, sum(nilai_buku) nilai_buku,sum(penyusutan_sd_tahun_sebelumnya) penyusutan_sd_tahun_sebelumnya
 	from getpenyusutan(?::int, ?::int) group by 1`, tahun_sk, tahun_sb)
 	pemeliharaan := i.db.Raw(`select pidinventaris, coalesce(sum(biaya),0) biaya from pemeliharaan where to_char(tgl, 'yyyy-mm') <= ? group by 1`, tgl)
 	organisasi := i.db.Raw("Select id, pid, nama, level from m_organisasi")
+
+	// get count filtered
+	strWhere := fmt.Sprintf(`
+		(i.pidopd::text = '%s' OR trim(both from '%s')='')  and
+		(i.pidopd_cabang::text = '%s' OR trim(both from '%s')='') and
+		(i.pidupt::text = '%s' OR trim(both from '%s')='') and
+		TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= '%s' and
+		i.deleted_at IS NULL AND i.draft IS NULL`, pidopd, pidopd, pidopd_cabang, pidopd_cabang, pidupt, pidupt, tgl)
 
 	// main query
 	sqlQuery := i.db.Table("detil_aset_lainnya as d").
@@ -384,7 +335,6 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 			CAST(sum(coalesce(pe.beban_penyusutan,0)) as numeric) nilai_beban_penyusutan,
 			CAST(sum(coalesce(pe.penyusutan_sd_tahun_sekarang,0)) as numeric) nilai_penyusutan_periode,
 			CAST(sum(coalesce(pe.nilai_buku,0)) as numeric) nilai_buku`).
-		Joins("CROSS JOIN (?) pr ", params).
 		Joins("Join inventaris i on i.id=d.pidinventaris").
 		Joins("Left Join (?) pe on pe.inventaris_id =i.id", penyusutan).
 		Joins("Left Join (?) p on p.pidinventaris= i.id", pemeliharaan).
@@ -392,18 +342,28 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 		Joins("Left Join (?) subkuasa on subkuasa.id=mo.pid", organisasi).
 		Joins("Left Join (?) kuasa on kuasa.id=subkuasa.pid", organisasi).
 		Joins("Left Join (?) pengguna on pengguna.id=kuasa.pid", organisasi).
-		Where(`
-			(i.pidopd::text =pr.pidopd OR trim(both from pr.pidopd)='')  and
-			(i.pidopd_cabang::text =pr.pidopd_cabang OR trim(both from pr.pidopd_cabang)='') and
-			(i.pidupt::text =pr.pidupt OR trim(both from pr.pidupt)='') and 
-			-- i.tgl_dibukukan between pr.tanggal_awal and pr.tanggal_akhir and
-			TO_CHAR(i.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal and 
-			i.deleted_at is null 
-			and i.draft is null`)
+		Where(strWhere)
 
-	summary_page := models.SummaryPage{}
-	if err := sqlQuery.Find(&summary_page).Error; err != nil {
+	// get from cache
+	err := i.redisCache.Get(context.TODO(), "bmd-atl-total"+strWhere, &summary_page)
+	if err != nil && err != cache.ErrCacheMiss {
+
 		return nil, err
+	}
+
+	if err == cache.ErrCacheMiss || summary_page.Jumlah == 0 {
+		sqlTxFiltered := sqlQuery.Find(&summary_page)
+
+		if sqlTxFiltered.Error != nil {
+			return nil, err
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   "bmd-atl-total" + strWhere,
+			Value: summary_page,
+			TTL:   time.Minute * 10,
+		})
 	}
 
 	return &summary_page, nil

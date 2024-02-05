@@ -36,6 +36,7 @@ type SummaryPage struct {
 	NilaiPenyusutanPeriode        float64 `json:"total_nilai_penyusutan_sd_periode"`
 	NilaiBebanPenyusutan          float64 `json:"total_nilai_beban_penyusutan"`
 	NilaiBuku                     float64 `json:"total_nilai_buku"`
+	NilaiAkumulasiPenyusutan      float64 `json:"total_nilai_akumulasi_penyusutan"`
 }
 
 type ResponseRekapitulasi struct {
