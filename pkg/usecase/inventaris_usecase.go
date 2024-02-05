@@ -475,7 +475,9 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		return inventaris, 0, 0, sqlOrgTx.Error
 	}
 
-	fmt.Println("check user level", organisasiLoggedIn.Level)
+	sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins(" left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
 	if organisasiLoggedIn.Level == 0 {
 		idsOrg := []int{}
@@ -516,10 +518,6 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			)
 		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
 
-		sql = sql.Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
-
 	} else if organisasiLoggedIn.Level == 1 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 		( organisasi_pengguna.id = %v AND organisasi_kuasa_pengguna.id = %v )
@@ -527,16 +525,11 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
 	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
 
-		sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	} else if organisasiLoggedIn.Level == 2 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
 
-		sql = sql.
-			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	}
 
 	sql = sql.Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
