@@ -37,6 +37,10 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 
 	whereClauseAccess := []string{}
 
+	sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+
 	if organisasiLoggedIn.Level == 0 {
 		idsOrg := []int{}
 
@@ -76,10 +80,6 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 			)
 		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
 
-		sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
-
 	} else if organisasiLoggedIn.Level == 1 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 		( organisasi_pengguna.id = %v AND organisasi_kuasa_pengguna.id = %v )
@@ -87,16 +87,11 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
 	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
 
-		sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	} else if organisasiLoggedIn.Level == 2 {
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
 
-		sql = sql.
-			Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 	}
 	return sql, whereClauseAccess
 }
