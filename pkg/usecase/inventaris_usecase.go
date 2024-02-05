@@ -132,10 +132,7 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 
 	sql = sql.
 		Where(strings.Join(whereClause, " AND ")).
-		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
-		Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
-		Joins("left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang")
 
 	sqlCountFiltered := sql
 
@@ -162,12 +159,6 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 			TTL:   time.Minute * 10,
 		})
 
-	}
-
-	if organisasiLoggedIn.Level == 2 {
-		sql = sql.
-			Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
-			Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang")
 	}
 
 	sql = sql.Select([]string{
