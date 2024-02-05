@@ -72,7 +72,6 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 	whereClause := []string{}
 
 	if g.Query("f_opd_filter") != "" {
-		fmt.Println("here donk", g.Query("f_opd_filter"))
 		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidopd = %s", g.Query("f_opd_filter")))
 	}
 
@@ -80,8 +79,14 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", g.Query("f_jenis_filter")))
 	}
 
-	if g.Query("q") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.nama_rek_aset like '%"+g.Query("f_jenis_filter")+"%' OR organisasi_pengguna.nama  like '%"+g.Query("f_jenis_filter")+"%'"))
+	if g.Query("search[value]") != "" {
+		nilai, err := strconv.Atoi(g.Query("search[value]"))
+		fmt.Println("SEARCH ", nilai)
+		if err != nil {
+			whereClause = append(whereClause, "m_barang.nama_rek_aset like '%"+g.Query("search[value]")+"%' ")
+		} else {
+			whereClause = append(whereClause, fmt.Sprintf("(inventaris.harga_satuan * inventaris.jumlah) = %v", nilai))
+		}
 	}
 
 	sql := i.db.Model(new(models.Inventaris))
@@ -168,7 +173,7 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 		"organisasi_sub_kuasa_pengguna.nama as nama_upt",
 		"m_barang.nama_rek_aset",
 		"m_kota.nama as alamat",
-	}).Joins("join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
+	}).Joins("left join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
 
 	txData := sql.
 		Offset(start).
