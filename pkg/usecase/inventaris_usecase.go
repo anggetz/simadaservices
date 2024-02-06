@@ -81,7 +81,6 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 
 	if g.Query("search[value]") != "" {
 		nilai, err := strconv.Atoi(g.Query("search[value]"))
-		fmt.Println("SEARCH ", nilai)
 		if err != nil {
 			whereClause = append(whereClause, "m_barang.nama_rek_aset like '%"+g.Query("search[value]")+"%' ")
 		} else {
@@ -95,29 +94,29 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 		column := g.Query("order[0][column]")
 		sort := g.Query("order[0][dir]")
 
-		if column == "9" { // harga satuan
-			order = fmt.Sprintf("inventaris.harga_satuan %s", sort)
+		if column == "8" { // alamat
+			order = fmt.Sprintf("m_kota.nama %s", sort)
 		}
-		if column == "8" { // pengguna barang
-			order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
-		}
-		if column == "7" { // kondisi barang
-			order = fmt.Sprintf("inventaris.kondisi %s", sort)
-		}
-		if column == "6" { // tahun perolehan
+		if column == "7" { // tahun perolehan
 			order = fmt.Sprintf("inventaris.tahun_perolehan %s", sort)
 		}
-		if column == "5" { // cara perolehan
-			order = fmt.Sprintf("inventaris.perolehan %s", sort)
+		if column == "6" { // nama barang
+			order = fmt.Sprintf("m_barang.nama_rek_aset %s", sort)
 		}
-		if column == "4" { // nama barang
-			order = fmt.Sprintf("m_barang.nama %s", sort)
-		}
-		if column == "3" { // noreg
+		if column == "5" { // noreg
 			order = fmt.Sprintf("inventaris.noreg %s", sort)
 		}
-		if column == "2" { // kode barang
-			order = fmt.Sprintf("inventaris.kode_barang %s", sort)
+		if column == "4" { // nilai perolehan
+			order = fmt.Sprintf("(inventaris.harga_satuan * inventaris.jumlah) %s", sort)
+		}
+		if column == "3" { // upt
+			order = fmt.Sprintf("organisasi_sub_kuasa_pengguna.nama %s", sort)
+		}
+		if column == "2" { // opd cabang
+			order = fmt.Sprintf("organisasi_kuasa_pengguna.nama %s", sort)
+		}
+		if column == "1" { // opd
+			order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
 		}
 
 	}
@@ -566,7 +565,38 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
 			(organisasi_sub_kuasa_pengguna.id = %v) 
 		`, organisasiLoggedIn.ID))
+	}
 
+	order := ""
+	// order data
+	if g.Query("order[0][column]") != "" {
+		column := g.Query("order[0][column]")
+		sort := g.Query("order[0][dir]")
+
+		if column == "9" { // harga satuan
+			order = fmt.Sprintf("inventaris.harga_satuan %s", sort)
+		}
+		if column == "8" { // pengguna barang
+			order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
+		}
+		if column == "7" { // kondisi barang
+			order = fmt.Sprintf("inventaris.kondisi %s", sort)
+		}
+		if column == "6" { // tahun perolehan
+			order = fmt.Sprintf("inventaris.tahun_perolehan %s", sort)
+		}
+		if column == "5" { // cara perolehan
+			order = fmt.Sprintf("inventaris.perolehan %s", sort)
+		}
+		if column == "4" { // nama barang
+			order = fmt.Sprintf("m_barang.nama %s", sort)
+		}
+		if column == "3" { // noreg
+			order = fmt.Sprintf("inventaris.noreg %s", sort)
+		}
+		if column == "2" { // kode barang
+			order = fmt.Sprintf("inventaris.kode_barang %s", sort)
+		}
 	}
 
 	sql = sql.Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
@@ -657,8 +687,12 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		}).
 		Where(strings.Join(whereClause, " AND ")).
 		Offset(start).
-		Limit(limit).
-		Find(&inventaris)
+		Limit(limit)
+
+	if order != "" {
+		sqlTx = sqlTx.Order(order)
+	}
+	sqlTx = sqlTx.Find(&inventaris)
 
 	for ind, _ := range inventaris {
 
