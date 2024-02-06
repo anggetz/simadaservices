@@ -52,8 +52,8 @@ func (a *authUseCaseImpl) IsUserHasAccess(userId float64, permissions []string) 
 	var countUserGroupRoleId int64
 	a.db.Table("users").
 		Where("users.id = ?", userId).
-		Joins("inner join user_group_role_permission on m_group_role_permission = users.user_group_role_id").
-		Where("user_group_role_permission.module_name IN ?", permissions).
+		Joins("inner join user_group_role_permission ug on ug.uuid = users.user_group_role_id").
+		Where("ug.module_name IN ?", permissions).
 		Count(&countUserGroupRoleId)
 
 	fmt.Println(countSpatiePerm, countUserGroupRoleId)
