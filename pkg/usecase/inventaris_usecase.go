@@ -89,6 +89,39 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 		}
 	}
 
+	order := ""
+	// order data
+	if g.Query("order[0][column]") != "" {
+		column := g.Query("order[0][column]")
+		sort := g.Query("order[0][dir]")
+
+		if column == "9" { // harga satuan
+			order = fmt.Sprintf("inventaris.harga_satuan %s", sort)
+		}
+		if column == "8" { // pengguna barang
+			order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
+		}
+		if column == "7" { // kondisi barang
+			order = fmt.Sprintf("inventaris.kondisi %s", sort)
+		}
+		if column == "6" { // tahun perolehan
+			order = fmt.Sprintf("inventaris.tahun_perolehan %s", sort)
+		}
+		if column == "5" { // cara perolehan
+			order = fmt.Sprintf("inventaris.perolehan %s", sort)
+		}
+		if column == "4" { // nama barang
+			order = fmt.Sprintf("m_barang.nama %s", sort)
+		}
+		if column == "3" { // noreg
+			order = fmt.Sprintf("inventaris.noreg %s", sort)
+		}
+		if column == "2" { // kode barang
+			order = fmt.Sprintf("inventaris.kode_barang %s", sort)
+		}
+
+	}
+
 	sql := i.db.Model(new(models.Inventaris))
 
 	whereAccessClause := []string{}
@@ -183,6 +216,10 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 		"m_barang.nama_rek_aset",
 		"m_kota.nama as alamat",
 	}).Joins("left join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
+
+	if order != "" {
+		sql = sql.Order(order)
+	}
 
 	txData := sql.
 		Offset(start).
