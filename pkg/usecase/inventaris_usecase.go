@@ -468,10 +468,10 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	if g.Query("search[value]") != "" {
 		nilai, err := strconv.Atoi(g.Query("search[value]"))
 		if err != nil {
-			whereClause = append(whereClause, `m_barang.nama_rek_aset ilike '%"+g.Query("search[value]")+"%' OR inventaris.kode_barang like '%"+g.Query("search[value]")+"%' OR organisasi_pengguna.nama ilike '%`+g.Query("search[value]")+`%' 
-						OR inventaris.noreg = '`+g.Query("search[value]")+`' OR inventaris.perolehan ilike '%`+g.Query("search[value]")+`%' OR inventaris.kondisi ilike '%`+g.Query("search[value]")+`%'`)
+			whereClause = append(whereClause, "(m_barang.nama_rek_aset ilike '%"+g.Query("search[value]")+"%' OR inventaris.kode_barang like '%"+g.Query("search[value]")+"%' OR organisasi_pengguna.nama ilike '%"+g.Query("search[value]")+"%'"+
+				"OR inventaris.noreg = '"+g.Query("search[value]")+"' OR inventaris.perolehan ilike '%"+g.Query("search[value]")+"%' OR inventaris.kondisi ilike '%"+g.Query("search[value]")+"%')")
 		} else {
-			whereClause = append(whereClause, fmt.Sprintf("inventaris.harga_satuan = %v", nilai)+" OR inventaris.tahun_perolehan = '"+g.Query("search[value]")+"' ")
+			whereClause = append(whereClause, fmt.Sprintf("( inventaris.harga_satuan = %v", nilai)+" OR inventaris.tahun_perolehan = '"+g.Query("search[value]")+"' )")
 		}
 	}
 
