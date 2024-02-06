@@ -207,6 +207,10 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 		"m_kota.nama as alamat",
 	}).Joins("left join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
 
+	if order != "" {
+		sql = sql.Order(order)
+	}
+
 	txData := sql.
 		Offset(start).
 		Limit(limit).Find(&resp)
