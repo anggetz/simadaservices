@@ -465,6 +465,16 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidupt = '%s'", g.Query("subkuasa_filter")))
 	}
 
+	if g.Query("search[value]") != "" {
+		nilai, err := strconv.Atoi(g.Query("search[value]"))
+		if err != nil {
+			whereClause = append(whereClause, `m_barang.nama_rek_aset ilike '%"+g.Query("search[value]")+"%' OR inventaris.kode_barang like '%"+g.Query("search[value]")+"%' OR organisasi_pengguna.nama ilike '%`+g.Query("search[value]")+`%' 
+						OR inventaris.noreg = '`+g.Query("search[value]")+`' OR inventaris.perolehan ilike '%`+g.Query("search[value]")+`%' OR inventaris.kondisi ilike '%`+g.Query("search[value]")+`%'`)
+		} else {
+			whereClause = append(whereClause, fmt.Sprintf("inventaris.harga_satuan = %v", nilai)+" OR inventaris.tahun_perolehan = '"+g.Query("search[value]")+"' ")
+		}
+	}
+
 	sql := i.db
 	// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
 	// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
