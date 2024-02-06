@@ -410,7 +410,7 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			}
 		case "c.luas_bangunan":
 			{
-				fieldName = "detil_bangunan.luas"
+				fieldName = "detil_bangunan.luasbangunan"
 				depJoin["detil_bangunan"] = true
 				break
 			}
@@ -480,35 +480,35 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
 	// Joins("join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
 
-	if _, ok := depJoin["detil_tanah"]; ok {
-		sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
+	if depJoin["detil_tanah"] {
+		sql = sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
 	}
-	if _, ok := depJoin["detil_mesin"]; ok {
-		sql.Joins("join detil_mesin ON detil_mesin.pidinventaris = inventaris.id")
+	if depJoin["detil_mesin"] {
+		sql = sql.Joins("join detil_mesin ON detil_mesin.pidinventaris = inventaris.id")
 	}
 	if _, ok := depJoin["detil_bangunan"]; ok {
-		sql.Joins("join detil_bangunan ON detil_bangunan.pidinventaris = inventaris.id")
+		sql = sql.Joins("join detil_bangunan ON detil_bangunan.pidinventaris = inventaris.id")
 	}
 	if _, ok := depJoin["detil_aset_lainnya"]; ok {
-		sql.Joins("join detil_aset_lainnya ON detil_aset_lainnya.pidinventaris = inventaris.id")
+		sql = sql.Joins("join detil_aset_lainnya ON detil_aset_lainnya.pidinventaris = inventaris.id")
 	}
 	if _, ok := depJoin["detil_jalan"]; ok {
-		sql.Joins("join detil_jalan ON detil_jalan.pidinventaris = inventaris.id")
+		sql = sql.Joins("join detil_jalan ON detil_jalan.pidinventaris = inventaris.id")
 	}
 	if _, ok := depJoin["detil_konstruksi"]; ok {
-		sql.Joins("join detil_konstruksi ON detil_konstruksi.pidinventaris = inventaris.id")
+		sql = sql.Joins("join detil_konstruksi ON detil_konstruksi.pidinventaris = inventaris.id")
 	}
 	if _, ok := depJoin["m_merk_barang"]; ok {
-		sql.Joins("join m_merk_barang ON m_merk_barang.id = detil_mesin.merk")
+		sql = sql.Joins("join m_merk_barang ON m_merk_barang.id = detil_mesin.merk")
 	}
 	// if _, ok := depJoin["penghapusan_detail"]; ok {
 	// 	sql.Joins("join m_merk_barang ON m_merk_barang.id = detil_mesin.merk")
 	// }
 	if _, ok := depJoin["m_kota"]; ok {
-		sql.Joins("join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
+		sql = sql.Joins("join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
 	}
 	if _, ok := depJoin["m_kecamatan"]; ok {
-		sql.Joins("join m_alamat as m_kecamatan ON m_kecamatan.id = inventaris.alamat_kecamatan")
+		sql = sql.Joins("join m_alamat as m_kecamatan ON m_kecamatan.id = inventaris.alamat_kecamatan")
 	}
 
 	organisasiLoggedIn := models.Organisasi{}
