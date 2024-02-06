@@ -424,16 +424,16 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		if from != "" && to != "" {
 			whereClause = append(whereClause, fmt.Sprintf(`
 					 ( 
-						%s BETWEEN %v AND %v
+						%s BETWEEN '%s' AND '%s'
 					 )
 					`,
 				fieldName,
 				from,
 				to))
 		} else if from != "" {
-			whereClause = append(whereClause, fmt.Sprintf("%s >= %v", fieldName, from))
+			whereClause = append(whereClause, fmt.Sprintf("%s >= '%s' ", fieldName, from))
 		} else if to != "" {
-			whereClause = append(whereClause, fmt.Sprintf("%s <= %v", fieldName, to))
+			whereClause = append(whereClause, fmt.Sprintf("%s <= '%s' ", fieldName, to))
 		}
 	}
 
@@ -442,11 +442,11 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	}
 
 	if g.Query("koderincianobjek") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.koderincianobjek = '%s'", g.Query("koderincianobjek")))
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_rincian_objek = '%s'", g.Query("koderincianobjek")))
 	}
 
 	if g.Query("kodesubrincianobjek") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kodesubrincianobjek = '%s'", g.Query("kodesubrincianobjek")))
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_sub_rincian_objek = '%s'", g.Query("kodesubrincianobjek")))
 	}
 
 	if g.Query("organisasi_filter") != "" {
