@@ -24,6 +24,8 @@ services:
     restart: always
     depends_on:
       - service-config
+    volumes:
+      - ./storage:/app/storage
     networks:
       - simada_default
       - service_epersediaan_epersediaan
@@ -32,6 +34,8 @@ services:
       context: ./
       dockerfile: ./cmd/service-transaction/Dockerfile
     restart: always
+    volumes:
+      - ./storage:/app/storage
     depends_on:
       - service-config
     networks:
@@ -42,6 +46,8 @@ services:
       context: ./
       dockerfile: ./cmd/service-pipeline/Dockerfile
     restart: always
+    volumes:
+      - ./storage:/app/storage
     depends_on:
       - service-config
     networks:
