@@ -22,6 +22,7 @@ type InvoiceUseCase interface {
 	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
 	GetPemeliharaanInventaris(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
+	GetInventarisNeedVerificator(limit int, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	SetDB(*gorm.DB) InvoiceUseCase
 	SetRedisCache(*cache.Cache) InvoiceUseCase
 }
@@ -227,6 +228,161 @@ type getInvoiceResponse struct {
 	PenggunaBarang   string `json:"pengguna_barang"`
 	Detail           string `json:"detail"`
 	CanDelete        bool   `json:"can_delete"`
+}
+
+func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
+
+	inventaris := []getInvoiceResponse{}
+
+	whereClauseAccess := []string{}
+	whereClause := []string{}
+
+	sql := i.db
+
+	sql = sql.Model(new(models.Inventaris)).Where("inventaris.verifikator_flag IS FALSE AND inventaris.verifikator_is_revise IS FALSE").
+		Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi")
+
+	organisasiLoggedIn := models.Organisasi{}
+
+	t, _ := g.Get("token_info")
+
+	// get organisasi
+	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", t.(jwt.MapClaims)["org_id"]))
+	if sqlOrgTx.Error != nil {
+		return nil, 0, 0, sqlOrgTx.Error
+	}
+
+	if organisasiLoggedIn.Level == 1 {
+		whereClauseAccess = append(whereClauseAccess, "inventaris.verifikator_status = 0")
+	} else if organisasiLoggedIn.Level == 0 {
+		whereClauseAccess = append(whereClauseAccess, "inventaris.verifikator_status = 1")
+	} else if organisasiLoggedIn.Level == 2 {
+		whereClauseAccess = append(whereClauseAccess, "inventaris.verifikator_status = 10")
+	}
+
+	var countData struct {
+		Total int64
+	}
+
+	sqlCount := sql.
+		Model(new(models.Inventaris)).
+		Where(strings.Join(whereClauseAccess, " AND "))
+
+	redisCountAllKey := "inventaris-verificator-count-all"
+
+	if organisasiLoggedIn.Level > 0 {
+		redisCountAllKey = redisCountAllKey + "-" + strconv.Itoa(organisasiLoggedIn.ID)
+	}
+
+	err := i.redisCache.Get(context.TODO(), redisCountAllKey, &countData.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	if err == cache.ErrCacheMiss {
+		sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
+
+		if sqlTxCount.Error != nil {
+			return nil, 0, 0, sqlCount.Error
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   redisCountAllKey,
+			Value: countData.Total,
+			TTL:   time.Minute * 10,
+		})
+	}
+
+	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, i.db, &organisasiLoggedIn)
+
+	whereClause = append(whereClause, whereClauseAccess...)
+
+	sql = sql.Where(strings.Join(whereClause, " AND "))
+
+	var countDataFiltered struct {
+		Total int64
+	}
+
+	sqlCountFiltered := sql.
+		Model(new(models.Inventaris)).
+		Where(strings.Join(whereClause, " AND "))
+
+	err = i.redisCache.Get(context.TODO(), "inventaris-verificator-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
+		sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
+
+		if sqlTxCountFiltered.Error != nil {
+			return nil, 0, 0, sqlCountFiltered.Error
+		}
+
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   strings.Join(whereClause, " AND "),
+			Value: countDataFiltered.Total,
+			TTL:   time.Minute * 10,
+		})
+
+	}
+
+	sqlTx := sql.
+		Select([]string{
+			"inventaris.*",
+			"m_barang.nama_rek_aset",
+			"m_jenis_barang.kelompok_kib",
+			"m_jenis_barang.nama as jenis",
+			"m_organisasi.nama as pengguna_barang",
+		}).
+		Where(strings.Join(whereClause, " AND ")).
+		Offset(start).
+		Limit(limit)
+
+	order := ""
+	// order data
+	if g.Query("order[0][column]") != "" {
+		column := g.Query("order[0][column]")
+		sort := g.Query("order[0][dir]")
+
+		if column == "9" { // harga satuan
+			order = fmt.Sprintf("inventaris.harga_satuan %s", sort)
+		}
+		if column == "8" { // pengguna barang
+			order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
+		}
+		if column == "7" { // kondisi barang
+			order = fmt.Sprintf("inventaris.kondisi %s", sort)
+		}
+		if column == "6" { // tahun perolehan
+			order = fmt.Sprintf("inventaris.tahun_perolehan %s", sort)
+		}
+		if column == "5" { // cara perolehan
+			order = fmt.Sprintf("inventaris.perolehan %s", sort)
+		}
+		if column == "4" { // nama barang
+			order = fmt.Sprintf("m_barang.nama %s", sort)
+		}
+		if column == "3" { // noreg
+			order = fmt.Sprintf("inventaris.noreg %s", sort)
+		}
+		if column == "2" { // kode barang
+			order = fmt.Sprintf("inventaris.kode_barang %s", sort)
+		}
+	}
+
+	if order != "" {
+		sqlTx = sqlTx.Order(order)
+	}
+	sqlTx = sqlTx.Find(&inventaris)
+
+	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
 }
 
 func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {

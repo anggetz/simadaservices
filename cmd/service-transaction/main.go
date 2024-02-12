@@ -153,6 +153,7 @@ func main() {
 		apiGroupTransaction := apiGroup.Group("/inventaris")
 		{
 			apiGroupTransaction.GET("/get", rest.NewInvoiceApi().Get)
+			apiGroupTransaction.GET("/get-inventaris-need-verification", rest.NewInvoiceApi().GetInventarisNeedVerification)
 			apiGroupTransaction.GET("/get-inventaris-pemeliharaan", rest.NewInvoiceApi().GetInventarisPemeliharaan)
 		}
 
