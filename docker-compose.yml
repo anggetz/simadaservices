@@ -29,6 +29,18 @@ services:
     networks:
       - simada_default
       - service_epersediaan_epersediaan
+  service-worker:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-worker/Dockerfile
+    restart: always
+    depends_on:
+      - service-config
+    volumes:
+      - ./storage:/app/storage
+    networks:
+      - simada_default
+      - service_epersediaan_epersediaan
   service-transaction:
     build:
       context: ./
