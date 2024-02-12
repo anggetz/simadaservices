@@ -9,5 +9,6 @@ FROM alpine:3.16
 
 COPY --from=builder /app/.env .
 COPY --from=builder /app/executable .
+COPY --from=builder /app/storage/logs /storage/logs
 
 CMD ./executable

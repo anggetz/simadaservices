@@ -37,7 +37,7 @@ services:
     depends_on:
       - service-config
     volumes:
-      - ./storage:/app/storage
+      - ./storage:/storage
     networks:
       - simada_default
       - service_epersediaan_epersediaan
