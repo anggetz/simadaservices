@@ -107,8 +107,12 @@ func main() {
 	kernel.Kernel = kernel.NewKernel()
 
 	// set scheduler berdasarkan zona waktu sesuai kebutuhan
-	jakartaTime, _ := time.LoadLocation("Asia/Jakarta")
-	scheduler := cron.New(cron.WithLocation(jakartaTime))
+	// jakartaTime, err :=
+	// if err != nil {
+	// 	log.Fatal("Error loading Asia Jakarta")
+	// }
+
+	scheduler := cron.New(cron.WithLocation(time.Local))
 	// stop scheduler tepat sebelum fungsi berakhir
 	defer scheduler.Stop()
 
