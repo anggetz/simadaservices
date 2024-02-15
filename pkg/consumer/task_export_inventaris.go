@@ -7,18 +7,28 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-type TaskImportInventaris struct {
+type TaskExportInventaris struct {
 	rmq.Consumer
-	Payload TaskImportInventarisPayload
+	Payload TaskExportInventarisPayload
 }
 
-type TaskImportInventarisPayload struct {
+type TaskExportInventarisPayload struct {
 	Headers []string
 	Data    []interface{}
 }
 
-func (t *TaskImportInventaris) Consume(d rmq.Delivery) {
+func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 	var err error
+	// insert data
+
+	defer func(errors error) {
+		if errors != nil {
+			// sucess
+		} else {
+			//  update status error
+		}
+
+	}(err)
 
 	fmt.Println("performing task")
 

@@ -1,6 +1,7 @@
 package rest
 
 import (
+	"fmt"
 	"simadaservices/cmd/service-transaction/kernel"
 	"simadaservices/pkg/queue"
 	"simadaservices/pkg/tools"
@@ -13,6 +14,7 @@ import (
 
 type InvoiceApi interface {
 	Get(gin *gin.Context)
+	GetQueueExportInventaris(gin *gin.Context)
 	GetInventarisPemeliharaan(gin *gin.Context)
 	GetInventarisNeedVerification(gin *gin.Context)
 }
@@ -22,6 +24,37 @@ type InvoiceImpl struct {
 
 func NewInvoiceApi() InvoiceApi {
 	return &InvoiceImpl{}
+}
+
+func (a *InvoiceImpl) GetQueueExportInventaris(g *gin.Context) {
+	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
+	queues, err := connectionRedis.GetOpenQueues()
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	for _, q := range queues {
+		// queue, err := connectionRedis.OpenQueue(q)
+		// if err != nil {
+		// 	g.JSON(400, err.Error())
+		// 	g.Abort()
+		// 	return
+		// }
+
+		statQ, err := connectionRedis.CollectStats([]string{q})
+		if err != nil {
+			g.JSON(400, err.Error())
+			g.Abort()
+			return
+		}
+
+		fmt.Println("ready count worker:", statQ.QueueStats["excel-worker"].UnackedCount())
+	}
+
+	// return g.JSON(preQueueWorkerExcel.)
+
 }
 
 func (a *InvoiceImpl) Get(g *gin.Context) {
@@ -52,6 +85,10 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 			return
 		}
 
+		g.JSON(200, tools.HttpResponse{
+			Message: "Please wait! file exporting.",
+		})
+		return
 	} else {
 		inventaris, totalFiltered, total, err := usecase.
 			NewInventarisUseCase().

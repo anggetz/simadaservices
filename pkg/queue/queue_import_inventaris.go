@@ -19,7 +19,7 @@ func (q *QueueImportInventaris) Register(connection rmq.Connection) {
 	if err != nil {
 		panic(err)
 	}
-	_, err = taskExcelQueue.AddConsumer("task_import_inventaris", &consumer.TaskImportInventaris{})
+	_, err = taskExcelQueue.AddConsumer("task_import_inventaris", &consumer.TaskExportInventaris{})
 	if err != nil {
 		panic(err)
 	}
