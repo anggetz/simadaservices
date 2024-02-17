@@ -41,7 +41,7 @@ func (h *homeApiImpl) GetNilaiAsset(g *gin.Context) {
 
 	t, _ := g.Get("token_info")
 
-	nilaiAsset, err := usecase.NewHomeUseCase(kernel.Kernel.Config.DB.Connection).GetNilaiAsset(t.(jwt.MapClaims))
+	nilaiAsset, err := usecase.NewHomeUseCase(kernel.Kernel.Config.DB.Connection).GetNilaiAsset(t.(jwt.MapClaims), g)
 	if err != nil {
 		g.AbortWithError(400, err)
 		return

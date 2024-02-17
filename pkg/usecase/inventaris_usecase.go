@@ -385,15 +385,10 @@ func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *g
 	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
 }
 
-func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
+func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string, map[string]bool) {
 
-	inventaris := []getInvoiceResponse{}
-
-	whereClause := []string{}
-	whereClauseAccess := []string{}
 	depJoin := map[string]bool{}
-
-	// get the filter
+	whereClause := []string{}
 
 	if g.Query("draft") != "" {
 		if g.Query("draft") == "1" {
@@ -411,7 +406,7 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		whereClause = append(whereClause, fmt.Sprintf("inventaris.id IN (%s)", g.Query("except-id-inventaris")))
 	}
 
-	if g.Query("jenisbarangs") != "" {
+	if g.Query("jenisbarangs") != "" && g.Query("jenisbarangs") != "null" {
 		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", g.Query("jenisbarangs")))
 	}
 
@@ -630,6 +625,21 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			whereClause = append(whereClause, fmt.Sprintf("( inventaris.harga_satuan = %v", nilai)+" OR inventaris.tahun_perolehan = '"+g.Query("search[value]")+"' )")
 		}
 	}
+
+	return whereClause, depJoin
+}
+
+func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
+
+	inventaris := []getInvoiceResponse{}
+
+	whereClause := []string{}
+	whereClauseAccess := []string{}
+	depJoin := map[string]bool{}
+
+	// get the filter
+
+	whereClause, depJoin = i.buildGetInventarisFilter(g)
 
 	sql := i.db
 	// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
