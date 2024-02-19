@@ -148,7 +148,7 @@ func main() {
 	defer db.Close()
 	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
 
-	new(queue.QueueImportInventaris).Register(connectionRedis)
+	new(queue.QueueExportInventaris).Register(connectionRedis)
 	new(queue.QueueExportBMDATL).Register(connectionRedis)
 	new(queue.QueueExportRekapitulasi).Register(connectionRedis)
 

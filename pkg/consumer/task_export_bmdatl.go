@@ -29,7 +29,7 @@ type TaskExportBMDATLPayload struct {
 }
 
 const (
-	ATL_EXCEL_FILE_FOLDER = "BMD_ATL"
+	ATL_EXCEL_FILE_FOLDER = "bmd_atl"
 	ATL_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
 )
 
@@ -47,6 +47,7 @@ type QueryParamsAtl struct {
 	Kuasapengguna_Filter   string `form:"kuasapengguna_filter"`
 	Subkuasa_Filter        string `form:"subkuasa_filter"`
 	Draw                   string `form:"draw"`
+	QueueId                string `form:"queue_id"`
 }
 
 func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
@@ -65,11 +66,33 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 	opdname := usecase.OpdName{}
 	opdname = usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetOpdName(d.Payload())
 
+	timestr := t.DB.NowFunc().Format(ATL_FORMAT_FILE_TIME)
+	folderPath := os.Getenv("FOLDER_REPORT")
+	folderReport := ATL_EXCEL_FILE_FOLDER
+	fileName := opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + " " + timestr
+
+	defer func(errors error) {
+		if errors != nil {
+			// error
+			log.Println("Error:", errors.Error())
+		} else {
+			// success, update sukses status task queue
+			tq := models.TaskQueue{}
+			t.DB.First(&tq, "id = ?", params.QueueId)
+			tq.Status = "Success"
+			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
+			tq.UpdatedAt = t.DB.NowFunc()
+			if err := t.DB.Save(&tq).Error; err != nil {
+				log.Println("failed to update task")
+			}
+		}
+	}(err)
+
 	startTime := t.DB.NowFunc()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
-	report := []models.ReportMDBATL{}
-	report, _, _, _, _, err = usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
+	// report := []models.ReportMDBATL{}
+	report, _, _, _, _, _ := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
 		params.Penggunafilter, params.F_Kuasapengguna_Filter, params.Kuasapengguna_Filter, params.F_Subkuasa_Filter, params.Subkuasa_Filter,
 		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw)
 	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
@@ -78,7 +101,7 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Println(err)
+			log.Println(err.Error())
 		}
 	}()
 	// Set the sheet name
@@ -179,11 +202,7 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().String())
 
 	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().String())
-	timestr := t.DB.NowFunc().Format(ATL_FORMAT_FILE_TIME)
-	folderPath := os.Getenv("FOLDER_REPORT")
-	folderReport := ATL_EXCEL_FILE_FOLDER
 	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
-	fileName := opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + " " + timestr
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
 		err = d.Reject()

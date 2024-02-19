@@ -93,4 +93,5 @@ type FileStruct struct {
 	FileName  string
 	FileSize  float64
 	CreatedAt string
+	Status    string
 }

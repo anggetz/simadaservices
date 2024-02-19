@@ -99,8 +99,18 @@ func setUpRedis() {
 }
 
 func main() {
+	// Create or open a log file for writing
+	currentTime := time.Now().Format("2006-01-02")
+	logFile, err := os.OpenFile("storage/logs/"+currentTime+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatal("Error opening log file:", err)
+	}
+	defer logFile.Close()
 
-	err := godotenv.Load()
+	// Set the log output to the log file
+	log.SetOutput(logFile)
+
+	err = godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
 	}

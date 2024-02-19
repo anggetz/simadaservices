@@ -8,9 +8,18 @@ import (
 	"path/filepath"
 	"simadaservices/pkg/models"
 	"strconv"
+	"strings"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+const (
+	ATL_EXCEL_FILE_FOLDER = "bmd_atl"
+	ATL_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
 )
 
 type reportUseCase struct {
@@ -117,23 +126,28 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 	fileList := []models.FileStruct{}
 
 	reportType := g.Query("type")
-	folderPath := os.Getenv("FOLDER_REPORT") + "/" + reportType
-	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
-		return nil, err
-	}
-	files, err := FilePathWalkDir(folderPath)
-	if err != nil {
+	log.Println(reportType)
+	arr := strings.Split(reportType, "-")
+	folderPath := os.Getenv("FOLDER_REPORT") + "/" + arr[2]
+
+	task := []models.TaskQueue{}
+	if err := i.db.Find(&task, "task_name = ?", reportType).Error; err != nil {
 		return nil, err
 	}
 
-	for _, file := range files {
-		fileInfo, _ := os.Stat(file)
-		fileList = append(fileList, models.FileStruct{
-			FilePath:  folderPath,
-			FileName:  fileInfo.Name(),
-			FileSize:  math.Round(float64(fileInfo.Size())/(1024*1024)*100) / 100,
-			CreatedAt: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
-		})
+	for _, v := range task {
+		fileInfo, err := os.Stat(v.CallbackLink + ".xlsx")
+		if err == nil {
+			if !strings.HasPrefix(fileInfo.Name(), ".") {
+				fileList = append(fileList, models.FileStruct{
+					FilePath:  folderPath,
+					FileName:  fileInfo.Name(),
+					FileSize:  math.Round(float64(fileInfo.Size())/(1024*1024)*100) / 100,
+					CreatedAt: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
+					Status:    v.Status,
+				})
+			}
+		}
 	}
 
 	return fileList, nil
@@ -173,4 +187,28 @@ func (i *reportUseCase) GetTotalOpd(penggunafilter string) ([]models.Organisasi,
 	}
 
 	return opd, totalOpd, nil
+}
+
+func (i *reportUseCase) SetRegisterQueue(g *gin.Context) (*models.TaskQueue, error) {
+
+	t, _ := g.Get("token_info")
+	id := t.(jwt.MapClaims)["id"].(float64)
+	folderPath := os.Getenv("FOLDER_REPORT")
+
+	tq := models.TaskQueue{
+		TaskUUID:     uuid.NewString(),
+		TaskName:     "worker-export-bmdatl",
+		TaskType:     "export_report",
+		Status:       "pending",
+		CreatedBy:    int(id),
+		CallbackLink: folderPath + "/" + ATL_EXCEL_FILE_FOLDER,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := i.db.Create(&tq).Error; err != nil {
+		return nil, err
+	}
+
+	return &tq, nil
 }

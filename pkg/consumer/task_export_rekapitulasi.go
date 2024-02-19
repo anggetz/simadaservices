@@ -48,6 +48,7 @@ type QueryParamsRekapitulasi struct {
 	Subkuasa_Filter        string `form:"subkuasa_filter"`
 	Draw                   string `form:"draw"`
 	F_Jenisrekap           string `form:"f_jenisrekap"`
+	QueueId                string `form:"queue_id"`
 }
 
 func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
@@ -66,11 +67,37 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	opdname := usecase.OpdName{}
 	opdname = usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetOpdName(d.Payload())
 
+	timestr := t.DB.NowFunc().Format(REKAPITULASI_FORMAT_FILE_TIME)
+	folderPath := os.Getenv("FOLDER_REPORT")
+	folderReport := REKAPITULASI_EXCEL_FILE_FOLDER
+	fileName := ""
+	if opdname.Pengguna == "" && opdname.KuasaPengguna == "" {
+		fileName = "Rekapitulasi " + timestr
+	} else {
+		fileName = opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + " " + timestr
+	}
+
+	defer func(errors error) {
+		if errors != nil {
+			// error
+			log.Println("Error:", errors.Error())
+		} else {
+			// success, update sukses status task queue
+			tq := models.TaskQueue{}
+			t.DB.First(&tq, "id = ?", params.QueueId)
+			tq.Status = "Success"
+			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
+			tq.UpdatedAt = t.DB.NowFunc()
+			if err := t.DB.Save(&tq).Error; err != nil {
+				log.Println("failed to update task")
+			}
+		}
+	}(err)
+
 	startTime := t.DB.NowFunc()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
-	report := []models.ResponseRekapitulasi{}
-	report, _, _, _, _, err = usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
+	report, _, _, _, _, _ := usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
 		params.Penggunafilter, params.F_Kuasapengguna_Filter, params.Kuasapengguna_Filter, params.F_Subkuasa_Filter, params.Subkuasa_Filter,
 		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw, params.F_Jenisrekap)
 	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
@@ -148,16 +175,7 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().String())
 
 	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().String())
-	timestr := t.DB.NowFunc().Format(REKAPITULASI_FORMAT_FILE_TIME)
-	folderPath := os.Getenv("FOLDER_REPORT")
-	folderReport := REKAPITULASI_EXCEL_FILE_FOLDER
 	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
-	fileName := ""
-	if opdname.Pengguna == "" && opdname.KuasaPengguna == "" {
-		fileName = "Rekapitulasi " + timestr
-	} else {
-		fileName = opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + " " + timestr
-	}
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
 		err = d.Reject()
