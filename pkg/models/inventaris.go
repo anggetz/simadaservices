@@ -71,14 +71,17 @@ func (i *Inventaris) TableName() string {
 }
 
 type ReportInventaris struct {
-	IdPublish        int     `json:"id_publish"`
-	KodeBarang       string  `json:"kode_barang"`
-	NomorRegister    string  `json:"noreg"`
-	NamaBarang       string  `json:"nama_rek_aset"`
-	CaraPerolehan    string  `json:"perolehan"`
-	TahunPerolehan   string  `json:"tahun_perolehan"`
-	Kondisi          string  `json:"kondisi"`
-	PenggunaBarang   string  `json:"pengguna_barang"`
-	HargaSatuan      float64 `json:"harga_satuan"`
-	StatusVerifikasi string  `json:"status_verifikasi"`
+	IdPublish           int     `json:"id_publish"`
+	KodeBarang          string  `json:"kode_barang"`
+	Noreg               string  `json:"noreg"`
+	NamaRekAset         string  `json:"nama_rek_aset"`
+	Perolehan           string  `json:"perolehan"`
+	TahunPerolehan      string  `json:"tahun_perolehan"`
+	Kondisi             string  `json:"kondisi"`
+	PenggunaBarang      string  `json:"pengguna_barang"`
+	HargaSatuan         float64 `json:"harga_satuan"`
+	StatusVerifikasi    string  `json:"status_verifikasi"`
+	VerifikatorFlag     bool    `json:"verifikator_flag"`
+	VerifikatorStatus   int     `json:"verifikator_status"`
+	VerifikatorIsRevise bool    `json:"verifikator_is_revise"`
 }

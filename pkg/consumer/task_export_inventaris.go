@@ -77,17 +77,15 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 	startTime := t.DB.NowFunc()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
-	results, _, _, err := usecase.NewInventarisUseCase().
+	report, err := usecase.NewInventarisUseCase().
 		SetDB(kernel.Kernel.Config.DB.Connection).
 		SetRedisCache(kernel.Kernel.Config.REDIS.RedisCache).
-		GetExport(params)
+		GetExportInventaris(params)
 
 	if err != nil {
 		log.Println("Error get data: ", err.Error())
 		return
 	}
-
-	report := results.([]models.ReportInventaris)
 
 	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
 	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().String())
@@ -149,9 +147,9 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		f.SetCellValue(sheetName, "A"+newno, no)
 		f.SetCellValue(sheetName, "B"+newno, drow.IdPublish)
 		f.SetCellValue(sheetName, "C"+newno, drow.KodeBarang)
-		f.SetCellValue(sheetName, "D"+newno, drow.NomorRegister)
-		f.SetCellValue(sheetName, "E"+newno, drow.NamaBarang)
-		f.SetCellValue(sheetName, "F"+newno, drow.CaraPerolehan)
+		f.SetCellValue(sheetName, "D"+newno, drow.Noreg)
+		f.SetCellValue(sheetName, "E"+newno, drow.NamaRekAset)
+		f.SetCellValue(sheetName, "F"+newno, drow.Perolehan)
 		f.SetCellValue(sheetName, "G"+newno, drow.TahunPerolehan)
 		f.SetCellValue(sheetName, "H"+newno, drow.Kondisi)
 		f.SetCellValue(sheetName, "I"+newno, drow.PenggunaBarang)

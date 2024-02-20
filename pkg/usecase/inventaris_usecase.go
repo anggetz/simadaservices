@@ -27,7 +27,7 @@ type InvoiceUseCase interface {
 	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	GetInventarisNeedVerificator(limit int, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	SetRegisterQueue(g *gin.Context) (*models.TaskQueue, error)
-	GetExport(q QueryParamInventaris) (interface{}, int64, int64, error)
+	GetExportInventaris(q QueryParamInventaris) ([]models.ReportInventaris, error)
 
 	SetDB(*gorm.DB) InvoiceUseCase
 	SetRedisCache(*cache.Cache) InvoiceUseCase
@@ -428,13 +428,9 @@ func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *g
 	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
 }
 
-func (i *invoiceUseCaseImpl) QueryResults(q QueryParamInventaris, export bool, g *gin.Context) (interface{}, int64, int64, error) {
-
-	inventaris := []getInvoiceResponse{}
-
-	whereClause := []string{}
-	whereClauseAccess := []string{}
+func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, export bool, g *gin.Context) ([]string, map[string]bool) {
 	depJoin := map[string]bool{}
+	whereClause := []string{}
 
 	// get the filter
 	if q.Draft != "" {
@@ -687,6 +683,46 @@ func (i *invoiceUseCaseImpl) QueryResults(q QueryParamInventaris, export bool, g
 		}
 	}
 
+	return whereClause, depJoin
+}
+
+func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
+
+	inventaris := []getInvoiceResponse{}
+	q := QueryParamInventaris{}
+
+	whereClause := []string{}
+	whereClauseAccess := []string{}
+	depJoin := map[string]bool{}
+
+	t, _ := g.Get("token_info")
+
+	q.Start = start
+	q.Limit = limit
+	q.CanDelete = canDelete
+	q.Published = g.Query("published")
+	q.ExceptIDInventaris = g.Query("except-id-inventaris")
+	q.PencarianKhusus = g.Query("pencarian_khusus")
+	q.PencarianKhususNilai = g.Query("pencarian_khusus_nilai")
+	q.PencarianKhususRange = g.Query("pencarian_khusus_range")
+	q.PencarianKhususRangeNilaiFrom = g.Query("pencarian_khusus_range_nilai_from")
+	q.PencarianKhususRangeNilaiTo = g.Query("pencarian_khusus_range_nilai_to")
+	q.JenisBarangs = g.Query("jenisbarangs")
+	q.KodeObjek = g.Query("kodeobjek")
+	q.KodeRincianObjek = g.Query("koderincianobjek")
+	q.PenggunaFilter = g.Query("penggunafilter")
+	q.KuasaPenggunaFilter = g.Query("kuasapengguna_filter")
+	q.SubKuasaFilter = g.Query("subkuasa_filter")
+	q.Draft = g.Query("draft")
+	q.StatusSensus = g.Query("status_sensus")
+	q.StatusVerifikasi = g.Query("status_verifikasi")
+	q.TokenUsername = t.(jwt.MapClaims)["username"].(string)
+	q.TokenOrg = t.(jwt.MapClaims)["org_id"].(float64)
+	q.TokenId = t.(jwt.MapClaims)["id"].(float64)
+
+	// get the filter
+	whereClause, depJoin = i.buildGetInventarisFilter(q, false, g)
+
 	sql := i.db
 	// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
 	// Joins("join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
@@ -723,11 +759,8 @@ func (i *invoiceUseCaseImpl) QueryResults(q QueryParamInventaris, export bool, g
 		sql = sql.Joins("join m_alamat as m_kecamatan ON m_kecamatan.id = inventaris.alamat_kecamatan")
 	}
 
-	organisasiLoggedIn := models.Organisasi{}
-
-	// t, _ := g.Get("token_info")
-
 	// get organisasi
+	organisasiLoggedIn := models.Organisasi{}
 	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", q.TokenOrg))
 	if sqlOrgTx.Error != nil {
 		return inventaris, 0, 0, sqlOrgTx.Error
@@ -791,35 +824,33 @@ func (i *invoiceUseCaseImpl) QueryResults(q QueryParamInventaris, export bool, g
 
 	order := ""
 	// order data
-	if !export {
-		if g.Query("order[0][column]") != "" {
-			column := g.Query("order[0][column]")
-			sort := g.Query("order[0][dir]")
+	if g.Query("order[0][column]") != "" {
+		column := g.Query("order[0][column]")
+		sort := g.Query("order[0][dir]")
 
-			if column == "9" { // harga satuan
-				order = fmt.Sprintf("inventaris.harga_satuan %s", sort)
-			}
-			if column == "8" { // pengguna barang
-				order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
-			}
-			if column == "7" { // kondisi barang
-				order = fmt.Sprintf("inventaris.kondisi %s", sort)
-			}
-			if column == "6" { // tahun perolehan
-				order = fmt.Sprintf("inventaris.tahun_perolehan %s", sort)
-			}
-			if column == "5" { // cara perolehan
-				order = fmt.Sprintf("inventaris.perolehan %s", sort)
-			}
-			if column == "4" { // nama barang
-				order = fmt.Sprintf("m_barang.nama %s", sort)
-			}
-			if column == "3" { // noreg
-				order = fmt.Sprintf("inventaris.noreg %s", sort)
-			}
-			if column == "2" { // kode barang
-				order = fmt.Sprintf("inventaris.kode_barang %s", sort)
-			}
+		if column == "9" { // harga satuan
+			order = fmt.Sprintf("inventaris.harga_satuan %s", sort)
+		}
+		if column == "8" { // pengguna barang
+			order = fmt.Sprintf("organisasi_pengguna.nama %s", sort)
+		}
+		if column == "7" { // kondisi barang
+			order = fmt.Sprintf("inventaris.kondisi %s", sort)
+		}
+		if column == "6" { // tahun perolehan
+			order = fmt.Sprintf("inventaris.tahun_perolehan %s", sort)
+		}
+		if column == "5" { // cara perolehan
+			order = fmt.Sprintf("inventaris.perolehan %s", sort)
+		}
+		if column == "4" { // nama barang
+			order = fmt.Sprintf("m_barang.nama %s", sort)
+		}
+		if column == "3" { // noreg
+			order = fmt.Sprintf("inventaris.noreg %s", sort)
+		}
+		if column == "2" { // kode barang
+			order = fmt.Sprintf("inventaris.kode_barang %s", sort)
 		}
 	}
 
@@ -840,82 +871,76 @@ func (i *invoiceUseCaseImpl) QueryResults(q QueryParamInventaris, export bool, g
 		Total int64
 	}
 
-	if !export {
-		redisCountAllKey := "inventaris-count-all"
+	redisCountAllKey := "inventaris-count-all"
 
-		if organisasiLoggedIn.Level > 0 {
-			redisCountAllKey = redisCountAllKey + "-" + strconv.Itoa(organisasiLoggedIn.ID)
+	if organisasiLoggedIn.Level > 0 {
+		redisCountAllKey = redisCountAllKey + "-" + strconv.Itoa(organisasiLoggedIn.ID)
+	}
+
+	err := i.redisCache.Get(context.TODO(), redisCountAllKey, &countData.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	if err == cache.ErrCacheMiss {
+		sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
+
+		if sqlTxCount.Error != nil {
+			return nil, 0, 0, sqlCount.Error
 		}
 
-		err := i.redisCache.Get(context.TODO(), redisCountAllKey, &countData.Total)
-		if err != nil && err != cache.ErrCacheMiss {
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   redisCountAllKey,
+			Value: countData.Total,
+			TTL:   time.Minute * 10,
+		})
+	}
 
-			return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	whereClause = append(whereClause, whereClauseAccess...)
+
+	// get count filtered
+	sqlCountFiltered := sql.
+		Model(new(models.Inventaris)).
+		Where(strings.Join(whereClause, " AND "))
+
+	// get from cache
+	err = i.redisCache.Get(context.TODO(), "inventaris-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
+	if err != nil && err != cache.ErrCacheMiss {
+		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
+	}
+
+	if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
+		sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
+
+		if sqlTxCountFiltered.Error != nil {
+			return nil, 0, 0, sqlCountFiltered.Error
 		}
 
-		if err == cache.ErrCacheMiss {
-			sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
+		err = i.redisCache.Set(&cache.Item{
+			Ctx:   context.TODO(),
+			Key:   strings.Join(whereClause, " AND "),
+			Value: countDataFiltered.Total,
+			TTL:   time.Minute * 10,
+		})
 
-			if sqlTxCount.Error != nil {
-				return nil, 0, 0, sqlCount.Error
-			}
+	}
 
-			err = i.redisCache.Set(&cache.Item{
-				Ctx:   context.TODO(),
-				Key:   redisCountAllKey,
-				Value: countData.Total,
-				TTL:   time.Minute * 10,
-			})
-		}
-
-		whereClause = append(whereClause, whereClauseAccess...)
-
-		// get count filtered
-		sqlCountFiltered := sql.
-			Model(new(models.Inventaris)).
-			Where(strings.Join(whereClause, " AND "))
-		// get from cache
-		err = i.redisCache.Get(context.TODO(), "inventaris-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
-		if err != nil && err != cache.ErrCacheMiss {
-
-			return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
-		}
-
-		if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
-			sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
-
-			if sqlTxCountFiltered.Error != nil {
-				return nil, 0, 0, sqlCountFiltered.Error
-			}
-
-			err = i.redisCache.Set(&cache.Item{
-				Ctx:   context.TODO(),
-				Key:   strings.Join(whereClause, " AND "),
-				Value: countDataFiltered.Total,
-				TTL:   time.Minute * 10,
-			})
-
-		}
-
-		if err != nil {
-			return nil, 0, 0, fmt.Errorf("error when set redis cache: %v", err.Error())
-		}
+	if err != nil {
+		return nil, 0, 0, fmt.Errorf("error when set redis cache: %v", err.Error())
 	}
 
 	sqlTx := sql.
 		Select([]string{
 			"inventaris.*",
-			// "i.k",
 			"m_barang.nama_rek_aset",
 			"m_jenis_barang.kelompok_kib",
 			"m_jenis_barang.nama as jenis",
 			"m_organisasi.nama as pengguna_barang",
 		}).
-		Where(strings.Join(whereClause, " AND "))
-
-	if !export {
-		sqlTx = sqlTx.Offset(q.Start).Limit(q.Limit)
-	}
+		Where(strings.Join(whereClause, " AND ")).
+		Offset(q.Start).Limit(q.Limit)
 
 	if order != "" {
 		sqlTx = sqlTx.Order(order)
@@ -925,110 +950,174 @@ func (i *invoiceUseCaseImpl) QueryResults(q QueryParamInventaris, export bool, g
 		return nil, 0, 0, err
 	}
 
-	newInven := []models.ReportInventaris{}
-
-	for ind, dt := range inventaris {
-
+	for _, dt := range inventaris {
 		if q.CanDelete {
-			inventaris[ind].CanDelete = q.CanDelete
+			dt.CanDelete = q.CanDelete
 		}
-		if !inventaris[ind].VerifikatorFlag {
-			if inventaris[ind].VerifikatorIsRevise {
-				if !export {
-					inventaris[ind].StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
-				} else {
-					inventaris[ind].StatusVerifikasi = "Permintaan revisi data"
-				}
+		if !dt.VerifikatorFlag {
+			if dt.VerifikatorIsRevise {
+				dt.StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
 			} else {
-				if !export {
-					if inventaris[ind].VerifikatorStatus == 0 {
-						inventaris[ind].StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
-					} else if inventaris[ind].VerifikatorStatus == 1 {
-						inventaris[ind].StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
-					} else if inventaris[ind].VerifikatorStatus == 2 {
-						inventaris[ind].StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
-					}
-				} else {
-					if inventaris[ind].VerifikatorStatus == 0 {
-						inventaris[ind].StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
-					} else if inventaris[ind].VerifikatorStatus == 1 {
-						inventaris[ind].StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
-					} else if inventaris[ind].VerifikatorStatus == 2 {
-						inventaris[ind].StatusVerifikasi = "Telah terverifikasi"
-					}
+				if dt.VerifikatorStatus == 0 {
+					dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
+				} else if dt.VerifikatorStatus == 1 {
+					dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
+				} else if dt.VerifikatorStatus == 2 {
+					dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
 				}
 			}
 		} else {
-			if !export {
-				inventaris[ind].StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
-			} else {
-				inventaris[ind].StatusVerifikasi = "Telah terverifikasi"
-			}
-		}
-
-		if export {
-			desItem := models.ReportInventaris{
-				IdPublish:        dt.IdPublish,
-				KodeBarang:       dt.KodeBarang,
-				NomorRegister:    dt.Noreg,
-				NamaBarang:       dt.NamaRekAset,
-				CaraPerolehan:    dt.Perolehan,
-				TahunPerolehan:   dt.TahunPerolehan,
-				Kondisi:          dt.Kondisi,
-				PenggunaBarang:   dt.PenggunaBarang,
-				HargaSatuan:      dt.HargaSatuan,
-				StatusVerifikasi: dt.StatusVerifikasi,
-			}
-
-			newInven = append(newInven, desItem)
+			dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
 		}
 	}
 
-	if !export {
-		return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
-	} else {
-		return newInven, countDataFiltered.Total, countData.Total, sqlTx.Error
-	}
-
+	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
 }
 
-func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
+func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]models.ReportInventaris, error) {
+	inventaris := []models.ReportInventaris{}
 
-	q := QueryParamInventaris{}
+	whereClause := []string{}
+	whereClauseAccess := []string{}
+	depJoin := map[string]bool{}
 
-	t, _ := g.Get("token_info")
-
-	q.Start = start
-	q.Limit = limit
-	q.CanDelete = canDelete
-	q.Published = g.Query("published")
-	q.ExceptIDInventaris = g.Query("except-id-inventaris")
-	q.PencarianKhusus = g.Query("pencarian_khusus")
-	q.PencarianKhususNilai = g.Query("pencarian_khusus_nilai")
-	q.PencarianKhususRange = g.Query("pencarian_khusus_range")
-	q.PencarianKhususRangeNilaiFrom = g.Query("pencarian_khusus_range_nilai_from")
-	q.PencarianKhususRangeNilaiTo = g.Query("pencarian_khusus_range_nilai_to")
-	q.JenisBarangs = g.Query("jenisbarangs")
-	q.KodeObjek = g.Query("kodeobjek")
-	q.KodeRincianObjek = g.Query("koderincianobjek")
-	q.PenggunaFilter = g.Query("penggunafilter")
-	q.KuasaPenggunaFilter = g.Query("kuasapengguna_filter")
-	q.SubKuasaFilter = g.Query("subkuasa_filter")
-	q.Draft = g.Query("draft")
-	q.StatusSensus = g.Query("status_sensus")
-	q.StatusVerifikasi = g.Query("status_verifikasi")
-	q.TokenUsername = t.(jwt.MapClaims)["username"].(string)
-	q.TokenOrg = t.(jwt.MapClaims)["org_id"].(float64)
-	q.TokenId = t.(jwt.MapClaims)["id"].(float64)
-
-	return i.QueryResults(q, false, g)
-}
-
-func (i *invoiceUseCaseImpl) GetExport(q QueryParamInventaris) (interface{}, int64, int64, error) {
 	g := &gin.Context{}
-	result, _, _, _ := i.QueryResults(q, true, g)
 
-	return result, 0, 0, nil
+	// get the filter
+	whereClause, depJoin = i.buildGetInventarisFilter(q, false, g)
+
+	sql := i.db
+
+	if depJoin["detil_tanah"] {
+		sql = sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
+	}
+	if depJoin["detil_mesin"] {
+		sql = sql.Joins("join detil_mesin ON detil_mesin.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_bangunan"]; ok {
+		sql = sql.Joins("join detil_bangunan ON detil_bangunan.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_aset_lainnya"]; ok {
+		sql = sql.Joins("join detil_aset_lainnya ON detil_aset_lainnya.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_jalan"]; ok {
+		sql = sql.Joins("join detil_jalan ON detil_jalan.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_konstruksi"]; ok {
+		sql = sql.Joins("join detil_konstruksi ON detil_konstruksi.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["m_merk_barang"]; ok {
+		sql = sql.Joins("join m_merk_barang ON m_merk_barang.id = detil_mesin.merk")
+	}
+	if _, ok := depJoin["m_kota"]; ok {
+		sql = sql.Joins("join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
+	}
+	if _, ok := depJoin["m_kecamatan"]; ok {
+		sql = sql.Joins("join m_alamat as m_kecamatan ON m_kecamatan.id = inventaris.alamat_kecamatan")
+	}
+
+	// get organisasi
+	organisasiLoggedIn := models.Organisasi{}
+	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", q.TokenOrg))
+	if sqlOrgTx.Error != nil {
+		return inventaris, sqlOrgTx.Error
+	}
+
+	sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins(" left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+
+	if organisasiLoggedIn.Level == 0 {
+		idsOrg := []int{}
+
+		// get the children
+		level1Orgs := []models.Organisasi{}
+
+		sqlOrgLevel1 := i.db.Find(&level1Orgs, fmt.Sprintf("pid = %v", organisasiLoggedIn.ID))
+		if sqlOrgLevel1.Error != nil {
+			return inventaris, sqlOrgLevel1.Error
+		}
+
+		for _, org := range level1Orgs {
+			level2Orgs := []models.Organisasi{}
+			sqlOrgLevel2 := i.db.Find(&level2Orgs, fmt.Sprintf("pid = %v", org.ID))
+			if sqlOrgLevel2.Error != nil {
+				return inventaris, sqlOrgLevel2.Error
+			}
+			for _, org2 := range level1Orgs {
+				idsOrg = append(idsOrg, org2.ID)
+			}
+			idsOrg = append(idsOrg, org.ID)
+		}
+
+		elseIfSubKuasaPengguna := "true"
+
+		if len(idsOrg) > 0 {
+			elseIfSubKuasaPengguna = fmt.Sprintf("organisasi_sub_kuasa_pengguna.id IN (%v)", strings.Trim(strings.Join(strings.Split(fmt.Sprint(idsOrg), " "), ","), "[]"))
+		}
+
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
+			organisasi_pengguna.id = %v AND
+			(
+				(CASE WHEN organisasi_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_kuasa_pengguna.pid = %v END)
+				OR
+				(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE %s END)
+
+			)
+		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
+
+	} else if organisasiLoggedIn.Level == 1 {
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
+		( organisasi_pengguna.id = %v AND organisasi_kuasa_pengguna.id = %v )
+		AND
+		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
+	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
+
+	} else if organisasiLoggedIn.Level == 2 {
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
+			(organisasi_sub_kuasa_pengguna.id = %v) 
+		`, organisasiLoggedIn.ID))
+	}
+
+	sql = sql.Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi")
+
+	whereClause = append(whereClause, whereClauseAccess...)
+
+	sqlTx := sql.
+		Select([]string{
+			"inventaris.*",
+			"m_barang.nama_rek_aset",
+			"m_jenis_barang.kelompok_kib",
+			"m_jenis_barang.nama as jenis",
+			"m_organisasi.nama as pengguna_barang",
+		}).
+		Where(strings.Join(whereClause, " AND "))
+
+	if err := sqlTx.Find(&inventaris).Error; err != nil {
+		return nil, err
+	}
+
+	for _, dt := range inventaris {
+		if !dt.VerifikatorFlag {
+			if dt.VerifikatorIsRevise {
+				dt.StatusVerifikasi = "Permintaan revisi data"
+			} else {
+				if dt.VerifikatorStatus == 0 {
+					dt.StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
+				} else if dt.VerifikatorStatus == 1 {
+					dt.StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
+				} else if dt.VerifikatorStatus == 2 {
+					dt.StatusVerifikasi = "Telah terverifikasi"
+				}
+			}
+		} else {
+			dt.StatusVerifikasi = "Telah terverifikasi"
+		}
+	}
+
+	return inventaris, sqlTx.Error
 }
 
 func (i *invoiceUseCaseImpl) GetFromElastic(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
