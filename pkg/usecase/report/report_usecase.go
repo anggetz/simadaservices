@@ -18,8 +18,10 @@ import (
 )
 
 const (
-	ATL_EXCEL_FILE_FOLDER = "bmd_atl"
-	ATL_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
+	ATL_EXCEL_FILE_FOLDER          = "bmdatl"
+	REKAPITULASI_EXCEL_FILE_FOLDER = "rekapitulasi"
+
+	FORMAT_FILE_TIME = "02-01-2006 15:04:05"
 )
 
 type reportUseCase struct {
@@ -200,19 +202,63 @@ func (i *reportUseCase) GetTotalOpd(penggunafilter string) ([]models.Organisasi,
 	return opd, totalOpd, nil
 }
 
-func (i *reportUseCase) SetRegisterQueue(g *gin.Context) (*models.TaskQueue, error) {
+func (i *reportUseCase) SetRegisterQueue(g *gin.Context, reportType string) (*models.TaskQueue, error) {
 
 	t, _ := g.Get("token_info")
 	id := t.(jwt.MapClaims)["id"].(float64)
 	folderPath := os.Getenv("FOLDER_REPORT")
 
+	// set filename
+	pidopd := ""
+	pidopd_cabang := ""
+	pidupt := ""
+
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
+		pidopd = g.Query("penggunafilter")
+	}
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
+		pidopd_cabang = g.Query("kuasapengguna_filter")
+	}
+	if g.Query("f_subkuasa_filter") != "" {
+		pidupt = g.Query("f_subkuasa_filter")
+	} else {
+		pidupt = g.Query("subkuasa_filter")
+	}
+
+	opdName := OpdName{}
+	opd := models.Organisasi{}
+	opdcabang := models.Organisasi{}
+	opdsubcabang := models.Organisasi{}
+
+	if pidopd != "" {
+		i.db.First(&opd, pidopd)
+		opdName.Pengguna = opd.Nama
+	}
+
+	if pidopd_cabang != "" {
+		i.db.First(&opdcabang, pidopd_cabang)
+		opdName.KuasaPengguna = opdcabang.Nama
+	}
+
+	if pidupt != "" {
+		i.db.First(&opdsubcabang, pidupt)
+		opdName.SubKuasaPengguna = opdsubcabang.Nama
+	}
+
+	username := t.(jwt.MapClaims)["username"].(string)
+	fileName := opdName.Pengguna + ":" + opdName.KuasaPengguna + ":" + opdName.SubKuasaPengguna + "-" + username
+
 	tq := models.TaskQueue{
 		TaskUUID:     uuid.NewString(),
-		TaskName:     "worker-export-bmdatl",
+		TaskName:     "worker-export-" + reportType,
 		TaskType:     "export_report",
 		Status:       "pending",
 		CreatedBy:    int(id),
-		CallbackLink: folderPath + "/" + ATL_EXCEL_FILE_FOLDER,
+		CallbackLink: folderPath + "/" + reportType + "/" + fileName,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}

@@ -29,26 +29,26 @@ type TaskExportRekapitulasiPayload struct {
 }
 
 const (
-	REKAPITULASI_EXCEL_FILE_FOLDER = "Rekapitulasi"
+	REKAPITULASI_EXCEL_FILE_FOLDER = "rekapitulasi"
 	REKAPITULASI_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
 )
 
 type QueryParamsRekapitulasi struct {
-	Action                 string `form:"action"`
-	F_Bulan                string `form:"f_bulan"`
-	F_Jenis                string `form:"f_jenis"`
-	F_Periode              string `form:"f_periode"`
-	F_Tahun                string `form:"f_tahun"`
-	Firstload              string `form:"firstload"`
-	F_Penggunafilter       string `form:"f_penggunafilter"`
-	F_Kuasapengguna_Filter string `form:"f_kuasapengguna_filter"`
-	F_Subkuasa_Filter      string `form:"f_subkuasa_filter"`
-	Penggunafilter         string `form:"penggunafilter"`
-	Kuasapengguna_Filter   string `form:"kuasapengguna_filter"`
-	Subkuasa_Filter        string `form:"subkuasa_filter"`
-	Draw                   string `form:"draw"`
-	F_Jenisrekap           string `form:"f_jenisrekap"`
-	QueueId                string `form:"queue_id"`
+	Action                 string `json:"action"`
+	F_Bulan                string `json:"f_bulan"`
+	F_Jenis                string `json:"f_jenis"`
+	F_Periode              string `json:"f_periode"`
+	F_Tahun                string `json:"f_tahun"`
+	Firstload              string `json:"firstload"`
+	F_Penggunafilter       string `json:"f_penggunafilter"`
+	F_Kuasapengguna_Filter string `json:"f_kuasapengguna_filter"`
+	F_Subkuasa_Filter      string `json:"f_subkuasa_filter"`
+	Penggunafilter         string `json:"penggunafilter"`
+	Kuasapengguna_Filter   string `json:"kuasapengguna_filter"`
+	Subkuasa_Filter        string `json:"subkuasa_filter"`
+	Draw                   string `json:"draw"`
+	F_Jenisrekap           string `json:"f_jenisrekap"`
+	QueueId                int    `json:"queue_id"`
 }
 
 func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
@@ -85,7 +85,7 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 			// success, update sukses status task queue
 			tq := models.TaskQueue{}
 			t.DB.First(&tq, "id = ?", params.QueueId)
-			tq.Status = "Success"
+			tq.Status = "success"
 			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
 			tq.UpdatedAt = t.DB.NowFunc()
 			if err := t.DB.Save(&tq).Error; err != nil {

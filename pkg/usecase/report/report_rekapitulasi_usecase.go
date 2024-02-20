@@ -43,30 +43,28 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
 	}
 
-	firstload, _ := strconv.ParseBool(g.Query("firstload"))
-	if firstload == true {
+	// firstload, _ := strconv.ParseBool(g.Query("firstload"))
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
 		if g.Query("penggunafilter") != "" {
 			pidopd = g.Query("penggunafilter")
 		}
+	}
 
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
 		if g.Query("kuasapengguna_filter") != "" {
 			pidopd_cabang = g.Query("kuasapengguna_filter")
 		}
+	}
 
+	if g.Query("f_subkuasa_filter") != "" {
+		pidopd = g.Query("f_subkuasa_filter")
+	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
-		}
-	} else {
-		if g.Query("f_penggunafilter") != "" {
-			pidopd = g.Query("f_enggunafilter")
-		}
-
-		if g.Query("f_kuasapengguna_filter") != "" {
-			pidopd_cabang = g.Query("f_kuasapengguna_filter")
-		}
-
-		if g.Query("f_subkuasa_filter") != "" {
-			pidopd = g.Query("f_subkuasa_filter")
 		}
 	}
 
@@ -240,8 +238,8 @@ func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pi
 		})
 	}
 
-	var countDataFiltered int64
-	countDataFiltered = countData
+	// var countDataFiltered int64
+	countDataFiltered := countData
 
 	var ndraw int64
 	if draw != "" {
@@ -278,30 +276,28 @@ func (i *reportRekapitulasiUseCase) GetTotal(start int, limit int, g *gin.Contex
 		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
 	}
 
-	firstload, _ := strconv.ParseBool(g.Query("firstload"))
-	if firstload == true {
+	// firstload, _ := strconv.ParseBool(g.Query("firstload"))
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
 		if g.Query("penggunafilter") != "" {
 			pidopd = g.Query("penggunafilter")
 		}
+	}
 
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
 		if g.Query("kuasapengguna_filter") != "" {
 			pidopd_cabang = g.Query("kuasapengguna_filter")
 		}
+	}
 
+	if g.Query("f_subkuasa_filter") != "" {
+		pidopd = g.Query("f_subkuasa_filter")
+	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
-		}
-	} else {
-		if g.Query("f_penggunafilter") != "" {
-			pidopd = g.Query("f_enggunafilter")
-		}
-
-		if g.Query("f_kuasapengguna_filter") != "" {
-			pidopd_cabang = g.Query("f_kuasapengguna_filter")
-		}
-
-		if g.Query("f_subkuasa_filter") != "" {
-			pidopd = g.Query("f_subkuasa_filter")
 		}
 	}
 
@@ -310,6 +306,9 @@ func (i *reportRekapitulasiUseCase) GetTotal(start int, limit int, g *gin.Contex
 	tahun_sb = tahun_sb - 1
 
 	summary_page := models.SummaryPage{}
+
+	log.Println("query >>", g.Query("f_penggunafilter"), g.Query("penggunafilter"))
+	log.Println("Params", pidopd, pidopd_cabang, pidupt)
 
 	// pre query
 	// params := i.db.Raw(`select ? tahun_sekarang, ? tahun_sebelum, ?::text tanggal, ?::text pidopd, ?::text pidopd_cabang, ?::text pidupt`, tahun_sk, tahun_sb, tgl, pidopd, pidopd_cabang, pidupt)

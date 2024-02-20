@@ -24,7 +24,7 @@ func NewApi() *Api {
 }
 
 func (a *Api) GetInventaris(g *gin.Context) {
-	log.Println("start >> get bmd atl")
+	log.Println("start >> get inventaris")
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 
@@ -45,12 +45,12 @@ func (a *Api) GetInventaris(g *gin.Context) {
 		SummaryPage:     summary_page,
 	})
 
-	log.Println("end >> get bmd atl")
+	log.Println("end >> get inventaris")
 	// return
 }
 
 func (a *Api) GetRekapitulasi(g *gin.Context) {
-	log.Println("start >> get bmd atl")
+	log.Println("start >> get rekapitulasi")
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 
@@ -70,7 +70,7 @@ func (a *Api) GetRekapitulasi(g *gin.Context) {
 		SummaryPerPage:  summary_perpage,
 	})
 
-	log.Println("end >> get bmd atl")
+	log.Println("end >> get rekapitulasi")
 	// return
 }
 
@@ -84,9 +84,7 @@ func (a *Api) ExportRekapitulasi(g *gin.Context) {
 	}
 
 	// insert record into task_queue table
-	tq, err := usecase.
-		ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g)
-
+	tq, err := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g, "rekapitulasi")
 	if err != nil {
 		log.Println("Error insert task queue: ", err.Error())
 		g.JSON(400, err.Error())
@@ -219,7 +217,7 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 
 	// insert record into task_queue table
 	tq, err := usecase.
-		ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g)
+		ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g, "bmdatl")
 
 	if err != nil {
 		log.Println("Error insert task queue: ", err.Error())

@@ -143,8 +143,8 @@ func main() {
 
 	// bmdatl
 	apiGroup.GET("/get-bmdatl", rest.NewApi().GetBmdAtl)
-	apiGroup.GET("/export-bmdatl", rest.NewApi().ExportBmdAtl)
 	apiGroup.GET("/get-total-bmdatl", rest.NewApi().GetTotalBmdAtl)
+	apiGroup.GET("/export-bmdatl", rest.NewApi().ExportBmdAtl)
 
 	// FILE EXPORT
 	r.GET("/v1/report/download-file", rest.NewApi().GetFileExport)
