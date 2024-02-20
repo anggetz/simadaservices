@@ -986,7 +986,7 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 	// get the filter
 	whereClause, depJoin = i.buildGetInventarisFilter(q, false, g)
 
-	sql := i.db
+	sql := i.db.Model(&[]getInvoiceResponse{})
 
 	if depJoin["detil_tanah"] {
 		sql = sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
@@ -1194,13 +1194,41 @@ func (i *invoiceUseCaseImpl) SetRegisterQueue(g *gin.Context) (*models.TaskQueue
 	id := t.(jwt.MapClaims)["id"].(float64)
 	folderPath := os.Getenv("FOLDER_REPORT")
 
+	// set filename
+	pidopd := g.Query("penggunafilter")
+	pidopd_cabang := g.Query("kuasapengguna_filter")
+	pidupt := g.Query("subkuasa_filter")
+
+	opdName := OpdName{}
+	opd := models.Organisasi{}
+	opdcabang := models.Organisasi{}
+	opdsubcabang := models.Organisasi{}
+
+	if pidopd != "" {
+		i.db.First(&opd, pidopd)
+		opdName.Pengguna = opd.Nama
+	}
+
+	if pidopd_cabang != "" {
+		i.db.First(&opdcabang, pidopd_cabang)
+		opdName.KuasaPengguna = opdcabang.Nama
+	}
+
+	if pidupt != "" {
+		i.db.First(&opdsubcabang, pidupt)
+		opdName.SubKuasaPengguna = opdsubcabang.Nama
+	}
+
+	username := t.(jwt.MapClaims)["username"].(string)
+	fileName := opdName.Pengguna + ":" + opdName.KuasaPengguna + ":" + opdName.SubKuasaPengguna + "-" + username
+
 	tq := models.TaskQueue{
 		TaskUUID:     uuid.NewString(),
 		TaskName:     "worker-export-inventaris",
 		TaskType:     "export_report",
 		Status:       "pending",
 		CreatedBy:    int(id),
-		CallbackLink: folderPath + "/inventaris",
+		CallbackLink: folderPath + "/inventaris/" + fileName,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
 	}

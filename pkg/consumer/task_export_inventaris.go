@@ -63,7 +63,7 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 			// success, update sukses status task queue
 			tq := models.TaskQueue{}
 			t.DB.First(&tq, "id = ?", params.QueueId)
-			tq.Status = "Success"
+			tq.Status = "success"
 			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
 			tq.UpdatedAt = t.DB.NowFunc()
 			if err := t.DB.Save(&tq).Error; err != nil {

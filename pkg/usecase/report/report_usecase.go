@@ -147,6 +147,17 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 					Status:    v.Status,
 				})
 			}
+		} else {
+			filename := strings.Split(v.CallbackLink, "/")[len(strings.Split(v.CallbackLink, "/"))-1]
+			if v.Status == "pending" {
+				fileList = append(fileList, models.FileStruct{
+					FilePath:  folderPath,
+					FileName:  filename,
+					FileSize:  0.0,
+					CreatedAt: "",
+					Status:    v.Status,
+				})
+			}
 		}
 	}
 
