@@ -47,7 +47,7 @@ services:
       dockerfile: ./cmd/service-transaction/Dockerfile
     restart: always
     volumes:
-      - ./storage:/app/storage
+      - ./storage:/storage
     depends_on:
       - service-config
     networks:
