@@ -8,23 +8,22 @@ import (
 	"github.com/adjust/rmq/v5"
 )
 
-type QueueExportRekapitulasi struct{}
+type QueueExportInventaris struct{}
 
-const QUEUE_EXPORT_EXCEL_REKAPITULASI = "rekapitulasi-worker"
+const QUEUE_EXPORT_EXCEL_INVENTARIS = "excel-worker"
 
-func (q *QueueExportRekapitulasi) Register(connection rmq.Connection) {
+func (q *QueueExportInventaris) Register(connection rmq.Connection) {
 
-	taskExcelQueue, err := connection.OpenQueue(QUEUE_EXPORT_EXCEL_REKAPITULASI)
+	taskExcelQueue, err := connection.OpenQueue(QUEUE_EXPORT_EXCEL_INVENTARIS)
 
 	err = taskExcelQueue.StartConsuming(10, 20*time.Second)
 	if err != nil {
 		panic(err)
 	}
-	_, err = taskExcelQueue.AddConsumer("task_export_rekapitulasi", &consumer.TaskExportRekapitulasi{
+	_, err = taskExcelQueue.AddConsumer("task_export_inventaris", &consumer.TaskExportInventaris{
 		DB:    kernel.Kernel.Config.DB.Connection,
 		Redis: kernel.Kernel.Config.REDIS.RedisCache,
 	})
-
 	if err != nil {
 		panic(err)
 	}

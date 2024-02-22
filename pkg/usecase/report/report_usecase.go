@@ -7,9 +7,21 @@ import (
 	"os"
 	"path/filepath"
 	"simadaservices/pkg/models"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+const (
+	ATL_EXCEL_FILE_FOLDER          = "bmdatl"
+	REKAPITULASI_EXCEL_FILE_FOLDER = "rekapitulasi"
+
+	FORMAT_FILE_TIME = "02-01-2006 15:04:05"
 )
 
 type reportUseCase struct {
@@ -106,7 +118,7 @@ func (i *reportUseCase) GetOpdName(c string) OpdName {
 
 func (i *reportUseCase) GetPengguna() ([]models.Organisasi, error) {
 	pengguna := []models.Organisasi{}
-	if err := i.db.Find(&pengguna).Where("level = ?", "0").Error; err != nil {
+	if err := i.db.Find(&pengguna).Where("level = ?", 0).Error; err != nil {
 		return nil, err
 	}
 	return pengguna, nil
@@ -116,23 +128,39 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 	fileList := []models.FileStruct{}
 
 	reportType := g.Query("type")
-	folderPath := os.Getenv("FOLDER_REPORT") + "/" + reportType
-	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
-		return nil, err
-	}
-	files, err := FilePathWalkDir(folderPath)
-	if err != nil {
+	log.Println(reportType)
+	arr := strings.Split(reportType, "-")
+	folderPath := os.Getenv("FOLDER_REPORT") + "/" + arr[2]
+
+	task := []models.TaskQueue{}
+	if err := i.db.Find(&task, "task_name = ?", reportType).Error; err != nil {
 		return nil, err
 	}
 
-	for _, file := range files {
-		fileInfo, _ := os.Stat(file)
-		fileList = append(fileList, models.FileStruct{
-			FilePath:  folderPath,
-			FileName:  fileInfo.Name(),
-			FileSize:  math.Round(float64(fileInfo.Size())/(1024*1024)*100) / 100,
-			CreatedAt: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
-		})
+	for _, v := range task {
+		fileInfo, err := os.Stat(v.CallbackLink + ".xlsx")
+		if err == nil {
+			if !strings.HasPrefix(fileInfo.Name(), ".") {
+				fileList = append(fileList, models.FileStruct{
+					FilePath:  folderPath,
+					FileName:  fileInfo.Name(),
+					FileSize:  math.Round(float64(fileInfo.Size())/(1024*1024)*100) / 100,
+					CreatedAt: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
+					Status:    v.Status,
+				})
+			}
+		} else {
+			filename := strings.Split(v.CallbackLink, "/")[len(strings.Split(v.CallbackLink, "/"))-1]
+			if v.Status == "pending" {
+				fileList = append(fileList, models.FileStruct{
+					FilePath:  folderPath,
+					FileName:  filename,
+					FileSize:  0.0,
+					CreatedAt: "",
+					Status:    v.Status,
+				})
+			}
+		}
 	}
 
 	return fileList, nil
@@ -159,16 +187,85 @@ func (i *reportUseCase) DeleteFileExport(g *gin.Context) error {
 	return nil
 }
 
-func (i *reportUseCase) GetTotalOpd(g *gin.Context) ([]models.Organisasi, int64, error) {
+func (i *reportUseCase) GetTotalOpd(penggunafilter string) ([]models.Organisasi, int64, error) {
 	// jika opd_cabang kosong maka cek data untuk memecah export
 	var totalOpd int64
 	opd := []models.Organisasi{}
 	// check opd have opd_cabang ?
-	if err := i.db.Model(&models.Organisasi{}).Where("pid = ?", g.Query("f_penggunafilter")).
+	pid, _ := strconv.Atoi(penggunafilter)
+	if err := i.db.Model(&models.Organisasi{}).Where("pid = ?", pid).
 		Find(&opd).
 		Count(&totalOpd).Error; err != nil {
 		return nil, 0, err
 	}
 
 	return opd, totalOpd, nil
+}
+
+func (i *reportUseCase) SetRegisterQueue(g *gin.Context, reportType string) (*models.TaskQueue, error) {
+
+	t, _ := g.Get("token_info")
+	id := t.(jwt.MapClaims)["id"].(float64)
+	folderPath := os.Getenv("FOLDER_REPORT")
+
+	// set filename
+	pidopd := ""
+	pidopd_cabang := ""
+	pidupt := ""
+
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
+		pidopd = g.Query("penggunafilter")
+	}
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
+		pidopd_cabang = g.Query("kuasapengguna_filter")
+	}
+	if g.Query("f_subkuasa_filter") != "" {
+		pidupt = g.Query("f_subkuasa_filter")
+	} else {
+		pidupt = g.Query("subkuasa_filter")
+	}
+
+	opdName := OpdName{}
+	opd := models.Organisasi{}
+	opdcabang := models.Organisasi{}
+	opdsubcabang := models.Organisasi{}
+
+	if pidopd != "" {
+		i.db.First(&opd, pidopd)
+		opdName.Pengguna = opd.Nama
+	}
+
+	if pidopd_cabang != "" {
+		i.db.First(&opdcabang, pidopd_cabang)
+		opdName.KuasaPengguna = opdcabang.Nama
+	}
+
+	if pidupt != "" {
+		i.db.First(&opdsubcabang, pidupt)
+		opdName.SubKuasaPengguna = opdsubcabang.Nama
+	}
+
+	username := t.(jwt.MapClaims)["username"].(string)
+	fileName := opdName.Pengguna + ":" + opdName.KuasaPengguna + ":" + opdName.SubKuasaPengguna + "-" + username
+
+	tq := models.TaskQueue{
+		TaskUUID:     uuid.NewString(),
+		TaskName:     "worker-export-" + reportType,
+		TaskType:     "export_report",
+		Status:       "pending",
+		CreatedBy:    int(id),
+		CallbackLink: folderPath + "/" + reportType + "/" + fileName,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := i.db.Create(&tq).Error; err != nil {
+		return nil, err
+	}
+
+	return &tq, nil
 }

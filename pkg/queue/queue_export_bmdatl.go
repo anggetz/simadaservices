@@ -21,7 +21,8 @@ func (q *QueueExportBMDATL) Register(connection rmq.Connection) {
 		panic(err)
 	}
 	_, err = taskExcelQueue.AddConsumer("task_export_bmdatl", &consumer.TaskExportBMDATL{
-		DB: kernel.Kernel.Config.DB.Connection,
+		DB:    kernel.Kernel.Config.DB.Connection,
+		Redis: kernel.Kernel.Config.REDIS.RedisCache,
 	})
 	if err != nil {
 		panic(err)

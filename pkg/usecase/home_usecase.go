@@ -66,6 +66,31 @@ func (hu *homeUseCaseImpl) GetNilaiAsset(tokenInfo jwt.MapClaims, g *gin.Context
 	}
 
 	whereClauseAccess := []string{}
+	q := QueryParamInventaris{}
+	t, _ := g.Get("token_info")
+
+	q.Start = 0
+	q.Limit = 0
+	q.CanDelete = false
+	q.Published = g.Query("published")
+	q.ExceptIDInventaris = g.Query("except-id-inventaris")
+	q.PencarianKhusus = g.Query("pencarian_khusus")
+	q.PencarianKhususNilai = g.Query("pencarian_khusus_nilai")
+	q.PencarianKhususRange = g.Query("pencarian_khusus_range")
+	q.PencarianKhususRangeNilaiFrom = g.Query("pencarian_khusus_range_nilai_from")
+	q.PencarianKhususRangeNilaiTo = g.Query("pencarian_khusus_range_nilai_to")
+	q.JenisBarangs = g.Query("jenisbarangs")
+	q.KodeObjek = g.Query("kodeobjek")
+	q.KodeRincianObjek = g.Query("koderincianobjek")
+	q.PenggunaFilter = g.Query("penggunafilter")
+	q.KuasaPenggunaFilter = g.Query("kuasapengguna_filter")
+	q.SubKuasaFilter = g.Query("subkuasa_filter")
+	q.Draft = g.Query("draft")
+	q.StatusSensus = g.Query("status_sensus")
+	q.StatusVerifikasi = g.Query("status_verifikasi")
+	q.TokenUsername = t.(jwt.MapClaims)["username"].(string)
+	q.TokenOrg = t.(jwt.MapClaims)["org_id"].(float64)
+	q.TokenId = t.(jwt.MapClaims)["id"].(float64)
 
 	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
@@ -73,7 +98,7 @@ func (hu *homeUseCaseImpl) GetNilaiAsset(tokenInfo jwt.MapClaims, g *gin.Context
 
 	whereClauseAccess = append(whereClauseAccess, whereClauseAktifInventaris...)
 
-	whereClause, depJoin := new(invoiceUseCaseImpl).buildGetInventarisFilter(g)
+	whereClause, depJoin := new(invoiceUseCaseImpl).buildGetInventarisFilter(q, true, g)
 
 	whereClause = append(whereClause, whereClauseAccess...)
 

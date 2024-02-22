@@ -14,6 +14,7 @@ import (
 
 	"github.com/adjust/rmq/v5"
 	"github.com/gin-gonic/gin"
+	"gorm.io/gorm"
 )
 
 type Api struct{}
@@ -23,6 +24,7 @@ func NewApi() *Api {
 }
 
 func (a *Api) GetInventaris(g *gin.Context) {
+	log.Println("start >> get inventaris")
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 
@@ -43,14 +45,16 @@ func (a *Api) GetInventaris(g *gin.Context) {
 		SummaryPage:     summary_page,
 	})
 
-	return
+	log.Println("end >> get inventaris")
+	// return
 }
 
 func (a *Api) GetRekapitulasi(g *gin.Context) {
+	log.Println("start >> get rekapitulasi")
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 
-	data, recordsTotal, recordsFiltered, draw, summary_perpage, err := usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection).Get(start, length, g)
+	data, recordsTotal, recordsFiltered, draw, summary_perpage, err := usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).Get(start, length, g)
 	if err != nil {
 		g.JSON(400, err.Error())
 		g.Abort()
@@ -65,13 +69,24 @@ func (a *Api) GetRekapitulasi(g *gin.Context) {
 		Draw:            draw,
 		SummaryPerPage:  summary_perpage,
 	})
-	return
+
+	log.Println("end >> get rekapitulasi")
+	// return
 }
 
 func (a *Api) ExportRekapitulasi(g *gin.Context) {
 	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
-	preQueueWorkerExcel, err := connectionRedis.OpenQueue(queue.QUEUE_EXPORT_EXCEL_BMDATL)
+	preQueueWorkerExcel, err := connectionRedis.OpenQueue(queue.QUEUE_EXPORT_EXCEL_REKAPITULASI)
 	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	// insert record into task_queue table
+	tq, err := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g, "rekapitulasi")
+	if err != nil {
+		log.Println("Error insert task queue: ", err.Error())
 		g.JSON(400, err.Error())
 		g.Abort()
 		return
@@ -92,11 +107,13 @@ func (a *Api) ExportRekapitulasi(g *gin.Context) {
 		"firstload":              g.Query("firstload"),
 		"draw":                   g.Query("draw"),
 		"f_jenisrekap":           g.Query("f_jenisrekap"),
+		"queue_id":               tq.ID,
 	}
 
+	log.Println("payload : ", payload)
 	if g.Query("f_kuasapengguna_filter") != "" {
 		fmt.Println(">>> have kuasa filtered")
-		params, err := json.Marshal(payload)
+		params, _ := json.Marshal(payload)
 		err = preQueueWorkerExcel.PublishBytes(params)
 		if err != nil {
 			g.JSON(400, err.Error())
@@ -109,10 +126,7 @@ func (a *Api) ExportRekapitulasi(g *gin.Context) {
 		// payload["f_penggunafilter"] = strconv.Itoa(v.ID)
 		// payload["penggunafilter"] = strconv.Itoa(v.ID)
 		// fmt.Println(">>> pengguna : ", v.ID, " => ", v.Nama)
-		fmt.Println(">>> not have kuasa filtered")
-		payload["penggunafilter"] = "1"
-		payload["f_penggunafilter"] = "1"
-		params, err := json.Marshal(payload)
+		params, _ := json.Marshal(payload)
 		err = preQueueWorkerExcel.PublishBytes(params)
 		if err != nil {
 			g.JSON(400, err.Error())
@@ -123,17 +137,18 @@ func (a *Api) ExportRekapitulasi(g *gin.Context) {
 	}
 
 	g.JSON(200, tools.Response{
+		Data:    tq,
 		Message: "process exporting data ",
 	})
 
-	return
+	// return
 }
 
 func (a *Api) GetTotalRekapitulasi(g *gin.Context) {
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 
-	summary_page, err := usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection).GetTotal(start, length, g)
+	summary_page, err := usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).GetTotal(start, length, g)
 	if err != nil {
 		g.JSON(400, err.Error())
 		g.Abort()
@@ -144,15 +159,16 @@ func (a *Api) GetTotalRekapitulasi(g *gin.Context) {
 		Message: "success get data",
 		Data:    summary_page,
 	})
-	return
+	// return
 }
 
 func (a *Api) GetBmdAtl(g *gin.Context) {
+	log.Println("start >> get bmd atl")
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 	// action := g.Query("action")
 
-	data, recordsTotal, recordsFiltered, draw, summary_perpage, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection).Get(start, length, "", g)
+	data, recordsTotal, recordsFiltered, draw, summary_perpage, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).Get(start, length, "", g)
 	if err != nil {
 		g.JSON(400, err.Error())
 		g.Abort()
@@ -168,32 +184,15 @@ func (a *Api) GetBmdAtl(g *gin.Context) {
 		SummaryPerPage:  summary_perpage,
 	})
 
-	return
-}
-
-func (a *Api) GetBmdAtlTotalRecords(g *gin.Context) {
-	start, _ := strconv.Atoi(g.Query("start"))
-	length, _ := strconv.Atoi(g.Query("length"))
-
-	recordsTotal, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection).GetTotalRecords(start, length, g)
-	if err != nil {
-		g.JSON(400, err.Error())
-		g.Abort()
-		return
-	}
-
-	g.JSON(200, tools.HttpResponseReport{
-		Message: "success get data",
-		Data:    recordsTotal,
-	})
-	return
+	log.Println("end >> get bmd atl")
+	// return
 }
 
 func (a *Api) GetTotalBmdAtl(g *gin.Context) {
 	start, _ := strconv.Atoi(g.Query("start"))
 	length, _ := strconv.Atoi(g.Query("length"))
 
-	summary_page, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection).GetTotal(start, length, g)
+	summary_page, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).GetTotal(start, length, g)
 	if err != nil {
 		g.JSON(400, err.Error())
 		g.Abort()
@@ -204,13 +203,24 @@ func (a *Api) GetTotalBmdAtl(g *gin.Context) {
 		Message: "success get data",
 		Data:    summary_page,
 	})
-	return
+	// return
 }
 
 func (a *Api) ExportBmdAtl(g *gin.Context) {
 	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
 	preQueueWorkerExcel, err := connectionRedis.OpenQueue(queue.QUEUE_EXPORT_EXCEL_BMDATL)
 	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	// insert record into task_queue table
+	tq, err := usecase.
+		ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g, "bmdatl")
+
+	if err != nil {
+		log.Println("Error insert task queue: ", err.Error())
 		g.JSON(400, err.Error())
 		g.Abort()
 		return
@@ -230,11 +240,13 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 		"action":                 g.Query("action"),
 		"firstload":              g.Query("firstload"),
 		"draw":                   g.Query("draw"),
+		"queue_id":               tq.ID,
 	}
 
+	fmt.Println(">>> payload : ", payload)
 	if g.Query("f_kuasapengguna_filter") != "" {
 		fmt.Println(">>> have kuasa filtered")
-		params, err := json.Marshal(payload)
+		params, _ := json.Marshal(payload)
 		err = preQueueWorkerExcel.PublishBytes(params)
 		if err != nil {
 			g.JSON(400, err.Error())
@@ -242,10 +254,10 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 			return
 		}
 	} else {
+		fmt.Println(">>> not have kuasa filtered")
 		pengguna, _ := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetPengguna()
 		for _, v := range pengguna {
-			g.Set("f_penggunafilter", strconv.Itoa(v.ID))
-			opd, total, err := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetTotalOpd(g)
+			opd, total, err := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetTotalOpd(strconv.Itoa(v.ID))
 
 			if err != nil {
 				g.JSON(400, err.Error())
@@ -261,7 +273,7 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 					payload["kuasapengguna_filter"] = strconv.Itoa(v.ID)
 					fmt.Println(">>> kuasa : ", v.ID, " => ", v.Nama)
 
-					params, err := json.Marshal(payload)
+					params, _ := json.Marshal(payload)
 					err = preQueueWorkerExcel.PublishBytes(params)
 					if err != nil {
 						g.JSON(400, err.Error())
@@ -272,7 +284,7 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 			} else {
 				fmt.Println(">>> just data opd")
 
-				params, err := json.Marshal(payload)
+				params, _ := json.Marshal(payload)
 				err = preQueueWorkerExcel.PublishBytes(params)
 				if err != nil {
 					g.JSON(400, err.Error())
@@ -284,10 +296,11 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 	}
 
 	g.JSON(200, tools.Response{
+		Data:    tq,
 		Message: "process exporting data ",
 	})
 
-	return
+	// return
 }
 
 func (a *Api) FileListExport(g *gin.Context) {
@@ -305,12 +318,11 @@ func (a *Api) FileListExport(g *gin.Context) {
 		Message: "process exporting data ",
 	})
 
-	return
+	// return
 }
 
 func (a *Api) GetFileExport(g *gin.Context) {
-	// filePath := g.Query("file")
-	filePath := "storage/reports/BMD_ATL/BMD_ATL_2024-01-26 15:35:55 WIB.xlsx"
+	filePath := g.Query("file")
 
 	// Open the file
 	file, err := os.Open(filePath)
@@ -347,16 +359,25 @@ func (a *Api) DeleteFileExport(g *gin.Context) {
 		Message: "success deleted data ",
 	})
 
-	return
+	// return
 }
 
-func (a *Api) CronExportBmdAtl(connection rmq.Connection, params map[string]interface{}) {
+func (a *Api) CronExportBmdAtl(dbConnection *gorm.DB, connection rmq.Connection, params map[string]interface{}) {
 	connectionRedis := connection
 	preQueueWorkerExcel, err := connectionRedis.OpenQueue(queue.QUEUE_EXPORT_EXCEL_BMDATL)
 	if err != nil {
 		log.Println("Error open queue : ", err.Error())
 		return
 	}
+
+	// insert record into task_queue table
+	// tq, err := usecase.
+	// 	ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g)
+
+	// if err != nil {
+	// 	log.Println("Error insert task queue: ", err.Error())
+	// 	return
+	// }
 
 	payload := map[string]interface{}{
 		"f_periode":              params["f_periode"],
@@ -372,23 +393,22 @@ func (a *Api) CronExportBmdAtl(connection rmq.Connection, params map[string]inte
 		"action":                 params["action"],
 		"firstload":              params["firstload"],
 		"draw":                   params["draw"],
+		// "queue_id":               tq.ID,
 	}
+
+	log.Println("payload : ", payload)
 
 	if params["f_kuasapengguna_filter"] != "" {
 		fmt.Println(">>> have kuasa filtered")
-		params, err := json.Marshal(payload)
+		params, _ := json.Marshal(payload)
 		err = preQueueWorkerExcel.PublishBytes(params)
 		if err != nil {
 			log.Println("Error publish : ", err.Error())
 			return
 		}
 	} else {
-		pengguna, _ := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetPengguna()
-		for _, v := range pengguna {
-			var g gin.Context
-			g.Set("f_penggunafilter", strconv.Itoa(v.ID))
-			opd, total, err := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetTotalOpd(&g)
-
+		if params["f_penggunafilter"] != "" {
+			opd, total, err := usecase.ReportUseCase(dbConnection).GetTotalOpd(payload["f_penggunafilter"].(string))
 			if err != nil {
 				log.Println("Error get opd : ", err.Error())
 				return
@@ -402,7 +422,7 @@ func (a *Api) CronExportBmdAtl(connection rmq.Connection, params map[string]inte
 					payload["kuasapengguna_filter"] = strconv.Itoa(v.ID)
 					fmt.Println(">>> kuasa : ", v.ID, " => ", v.Nama)
 
-					params, err := json.Marshal(payload)
+					params, _ := json.Marshal(payload)
 					err = preQueueWorkerExcel.PublishBytes(params)
 					if err != nil {
 						log.Println("Error publish : ", err.Error())
@@ -412,15 +432,52 @@ func (a *Api) CronExportBmdAtl(connection rmq.Connection, params map[string]inte
 			} else {
 				fmt.Println(">>> just data opd")
 
-				params, err := json.Marshal(payload)
+				params, _ := json.Marshal(payload)
 				err = preQueueWorkerExcel.PublishBytes(params)
 				if err != nil {
 					log.Println("Error publish : ", err.Error())
 					return
 				}
 			}
+		} else {
+			pengguna, _ := usecase.ReportUseCase(dbConnection).GetPengguna()
+			for _, v := range pengguna {
+				pengguna := strconv.Itoa(v.ID)
+				opd, total, err := usecase.ReportUseCase(dbConnection).GetTotalOpd(pengguna)
+
+				if err != nil {
+					log.Println("Error get opd : ", err.Error())
+					return
+				}
+				// check opd have opd_cabang ?
+				if total > 0 {
+					fmt.Println(">>> have kuasa loop data", total)
+
+					for _, v := range opd {
+						payload["f_kuasapengguna_filter"] = strconv.Itoa(v.ID)
+						payload["kuasapengguna_filter"] = strconv.Itoa(v.ID)
+						fmt.Println(">>> kuasa : ", v.ID, " => ", v.Nama)
+
+						params, _ := json.Marshal(payload)
+						err = preQueueWorkerExcel.PublishBytes(params)
+						if err != nil {
+							log.Println("Error publish : ", err.Error())
+							return
+						}
+					}
+				} else {
+					fmt.Println(">>> just data opd")
+
+					params, _ := json.Marshal(payload)
+					err = preQueueWorkerExcel.PublishBytes(params)
+					if err != nil {
+						log.Println("Error publish : ", err.Error())
+						return
+					}
+				}
+			}
 		}
 	}
 
-	return
+	// return
 }

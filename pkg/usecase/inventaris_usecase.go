@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
+	"os"
 	"simadaservices/pkg/models"
 	"strconv"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"gopkg.in/mgo.v2/bson"
 	"gorm.io/gorm"
 )
@@ -22,9 +25,18 @@ type InvoiceUseCase interface {
 	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
 	GetPemeliharaanInventaris(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
+	GetInventarisNeedVerificator(limit int, skip int, g *gin.Context) (interface{}, int64, int64, error)
+	SetRegisterQueue(g *gin.Context) (*models.TaskQueue, error)
+	GetExportInventaris(q QueryParamInventaris) ([]models.ReportInventaris, error)
+
 	SetDB(*gorm.DB) InvoiceUseCase
 	SetRedisCache(*cache.Cache) InvoiceUseCase
 }
+
+const (
+	INVEN_EXCEL_FILE_FOLDER = "inventaris"
+	INVEN_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
+)
 
 type invoiceUseCaseImpl struct {
 	db         *gorm.DB
@@ -53,6 +65,38 @@ type getPemeliharaanInventaris struct {
 	NamaUpt       string `json:"nama_upt"`
 	NamaRekAset   string `json:"nama_rek_aset"`
 	Alamat        string `json:"alamat"`
+}
+
+type QueryParamInventaris struct {
+	Published                     string  `json:"published"`
+	ExceptIDInventaris            string  `json:"except-id-inventaris"`
+	PencarianKhusus               string  `json:"pencarian_khusus"`
+	PencarianKhususNilai          string  `json:"pencarian_khusus_nilai"`
+	PencarianKhususRange          string  `json:"pencarian_khusus_range"`
+	PencarianKhususRangeNilaiFrom string  `json:"pencarian_khusus_range_nilai_from"`
+	PencarianKhususRangeNilaiTo   string  `json:"pencarian_khusus_range_nilai_to"`
+	JenisBarangs                  string  `json:"jenisbarangs"`
+	KodeObjek                     string  `json:"kodeobjek"`
+	KodeRincianObjek              string  `json:"koderincianobjek"`
+	PenggunaFilter                string  `json:"penggunafilter"`
+	KuasaPenggunaFilter           string  `json:"kuasapengguna_filter"`
+	SubKuasaFilter                string  `json:"subkuasa_filter"`
+	Draft                         string  `json:"draft"`
+	StatusSensus                  string  `json:"status_sensus"`
+	StatusVerifikasi              string  `json:"status_verifikasi"`
+	Start                         int     `json:"start"`
+	Limit                         int     `json:"limit"`
+	CanDelete                     bool    `json:"can_delete"`
+	QueueId                       int     `json:"queue_id"`
+	TokenUsername                 string  `json:"token_username"`
+	TokenOrg                      float64 `json:"token_org"`
+	TokenId                       float64 `json:"token_id"`
+}
+
+type OpdName struct {
+	Pengguna         string `default:""`
+	KuasaPengguna    string `default:""`
+	SubKuasaPengguna string `default:""`
 }
 
 func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
@@ -384,33 +428,29 @@ func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *g
 	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
 }
 
-func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string, map[string]bool) {
-
+func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, export bool, g *gin.Context) ([]string, map[string]bool) {
 	depJoin := map[string]bool{}
 	whereClause := []string{}
 
-	if g.Query("draft") != "" {
-		if g.Query("draft") == "1" {
+	// get the filter
+	if q.Draft != "" {
+		if q.Draft == "1" {
 			whereClause = append(whereClause, "inventaris.draft IS NOT NULL")
 		} else {
 			whereClause = append(whereClause, "inventaris.draft IS NULL")
 		}
 	}
 
-	if g.Query("published") != "" {
+	if q.Published != "" {
 		whereClause = append(whereClause, "inventaris.id_publish NOT NULL")
 	}
 
-	if g.Query("except-id-inventaris") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("inventaris.id IN (%s)", g.Query("except-id-inventaris")))
+	if q.ExceptIDInventaris != "" {
+		whereClause = append(whereClause, fmt.Sprintf("inventaris.id IN (%s)", q.ExceptIDInventaris))
 	}
 
-	if g.Query("jenisbarangs") != "" && g.Query("jenisbarangs") != "null" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", g.Query("jenisbarangs")))
-	}
-
-	if g.Query("pencarian_khusus") != "" && g.Query("pencarian_khusus_nilai") != "" {
-		switch g.Query("pencarian_khusus") {
+	if q.PencarianKhusus != "" && q.PencarianKhususNilai != "" {
+		switch q.PencarianKhusus {
 		case "a,c,d,f.alamat":
 			{
 				whereClause = append(whereClause, fmt.Sprintf(`
@@ -421,10 +461,10 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string,
 							detil_konstruksi.alamat ~* '%s'
 						)
 					`,
-					g.Query("pencarian_khusus_nilai"),
-					g.Query("pencarian_khusus_nilai"),
-					g.Query("pencarian_khusus_nilai"),
-					g.Query("pencarian_khusus_nilai"),
+					q.PencarianKhususNilai,
+					q.PencarianKhususNilai,
+					q.PencarianKhususNilai,
+					q.PencarianKhususNilai,
 				))
 				// depJoin = append(depJoin, "detil_tanah", "detil_bangunan", "detil_jalan", "detil_konstruksi")
 				depJoin["detil_tanah"] = true
@@ -435,55 +475,55 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string,
 			}
 		case "b.merktipe":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("m_merk_barang.nama ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("m_merk_barang.nama ~* '%s'", q.PencarianKhususNilai))
 				depJoin["m_merk_barang"] = true
 				break
 			}
 		case "a.status_tanah":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.status_sertifikat ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.status_sertifikat ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_tanah"] = true
 				break
 			}
 		case "a.penggunaan":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.penggunaan ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.penggunaan ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_tanah"] = true
 				break
 			}
 		case "a.nomor_sertifikat":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.nomor_sertifikat ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.nomor_sertifikat ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_tanah"] = true
 				break
 			}
 		case "a.status_sertifikat":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.status_sertifikat ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_tanah.status_sertifikat ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_tanah"] = true
 				break
 			}
 		case "b.nomor_rangka":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_mesin.norangka ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_mesin.norangka ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_mesin"] = true
 				break
 			}
 		case "b.nomor_mesin":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_mesin.nomesin ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_mesin.nomesin ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_mesin"] = true
 				break
 			}
 		case "b.nomor_polisi":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_mesin.nopol ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_mesin.nopol ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_mesin"] = true
 				break
 			}
 		case "b.koderuasjalan":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_jalan.kode_jalan ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_jalan.kode_jalan ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_jalan"] = true
 				break
 			}
@@ -494,7 +534,7 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string,
 						detil_aset_lainnya.seni_pencipta ~* '%s'
 					 )
 					`,
-					g.Query("pencarian_khusus_nilai")))
+					q.PencarianKhususNilai))
 				depJoin["detil_aset_lainnya"] = true
 				break
 			}
@@ -506,49 +546,49 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string,
 						detil_aset_lainnya.buku_judul ~* '%s'
 					 )
 					`,
-					g.Query("pencarian_khusus_nilai"),
-					g.Query("pencarian_khusus_nilai")))
+					q.PencarianKhususNilai,
+					q.PencarianKhususNilai))
 				depJoin["detil_aset_lainnya"] = true
 				break
 			}
 		case "e.jenis":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("detil_aset_lainnya.ternak_jenis ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("detil_aset_lainnya.ternak_jenis ~* '%s'", q.PencarianKhususNilai))
 				depJoin["detil_aset_lainnya"] = true
 				break
 			}
 		case "inventaris.alamat_kota":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("m_kota.nama ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("m_kota.nama ~* '%s'", q.PencarianKhususNilai))
 				depJoin["m_kota"] = true
 				break
 			}
 
 		case "inventaris.alamat_kecamatan":
 			{
-				whereClause = append(whereClause, fmt.Sprintf("m_kecamatan.nama ~* '%s'", g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("m_kecamatan.nama ~* '%s'", q.PencarianKhususNilai))
 				depJoin["m_kecamatan"] = true
 				break
 			}
 
 		default:
 			{
-				whereClause = append(whereClause, fmt.Sprintf("%s ~* '%s'", g.Query("pencarian_khusus"), g.Query("pencarian_khusus_nilai")))
+				whereClause = append(whereClause, fmt.Sprintf("%s ~* '%s'", q.PencarianKhusus, q.PencarianKhususNilai))
 				break
 			}
 		}
 	}
 
-	if g.Query("pencarian_khusus_range") != "" && g.Query("pencarian_khusus_range") != "" && (g.Query("pencarian_khusus_range_nilai_from") != "" || g.Query("pencarian_khusus_range_nilai_to") != "") {
-		rangeKey := g.Query("pencarian_khusus_range")
+	if q.PencarianKhususRange != "" && (q.PencarianKhususRangeNilaiFrom != "" || q.PencarianKhususRangeNilaiTo != "") {
+		rangeKey := q.PencarianKhususRange
 		var from string
-		if g.Query("pencarian_khusus_range_nilai_from") != "" {
-			from = g.Query("pencarian_khusus_range_nilai_from")
+		if q.PencarianKhususRangeNilaiFrom != "" {
+			from = q.PencarianKhususRangeNilaiFrom
 		}
 
 		var to string
-		if g.Query("pencarian_khusus_range_nilai_to") != "" {
-			to = g.Query("pencarian_khusus_range_nilai_to")
+		if q.PencarianKhususRangeNilaiTo != "" {
+			to = q.PencarianKhususRangeNilaiTo
 		}
 		fieldName := ""
 		switch rangeKey {
@@ -587,41 +627,59 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string,
 		}
 	}
 
-	if g.Query("kodeobjek") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_objek = '%s'", g.Query("kodeobjek")))
+	if q.JenisBarangs != "" && q.JenisBarangs != "null" {
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", q.JenisBarangs))
 	}
 
-	if g.Query("koderincianobjek") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_rincian_objek = '%s'", g.Query("koderincianobjek")))
+	if q.KodeObjek != "" {
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_objek = '%s'", q.KodeObjek))
 	}
 
-	if g.Query("kodesubrincianobjek") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_sub_rincian_objek = '%s'", g.Query("kodesubrincianobjek")))
+	if q.KodeRincianObjek != "" {
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_rincian_objek = '%s'", q.KodeRincianObjek))
 	}
 
-	if g.Query("organisasi_filter") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_organisasi.id = '%s'", g.Query("organisasi_filter")))
+	// if q.KodeSubRincianObjek != "" {
+	// 	whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_sub_rincian_objek = '%s'", q.KodeSubRincianObjek))
+	// }
+
+	// if q.OrganisasiFilter != "" {
+	// 	whereClause = append(whereClause, fmt.Sprintf("m_organisasi.id = '%s'", q.OrganisasiFilter))
+	// }
+
+	if q.PenggunaFilter != "" {
+		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidopd = '%s'", q.PenggunaFilter))
 	}
 
-	if g.Query("penggunafilter") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidopd = '%s'", g.Query("penggunafilter")))
+	if q.KuasaPenggunaFilter != "" {
+		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidopd_cabang = '%s'", q.KuasaPenggunaFilter))
 	}
 
-	if g.Query("kuasapengguna_filter") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidopd_cabang = '%s'", g.Query("kuasapengguna_filter")))
+	if q.SubKuasaFilter != "" {
+		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidupt = '%s'", q.SubKuasaFilter))
 	}
 
-	if g.Query("subkuasa_filter") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("inventaris.pidupt = '%s'", g.Query("subkuasa_filter")))
+	if q.StatusVerifikasi != "" {
+		if q.StatusVerifikasi == "terverifikasi" {
+			whereClause = append(whereClause, "verifikator_flag IS TRUE")
+		} else if q.StatusVerifikasi == "proses verifikasi kuasa pengguna" {
+			whereClause = append(whereClause, "verifikator_flag IS FALSE AND verifikator_status = 0")
+		} else if q.StatusVerifikasi == "proses verifikasi pengguna" {
+			whereClause = append(whereClause, "verifikator_flag IS FALSE AND verifikator_status = 1")
+		} else if q.StatusVerifikasi == "revisi" {
+			whereClause = append(whereClause, "verifikator_is_revise IS TRUE AND verifikator_flag IS FALSE")
+		}
 	}
 
-	if g.Query("search[value]") != "" {
-		nilai, err := strconv.Atoi(g.Query("search[value]"))
-		if err != nil {
-			whereClause = append(whereClause, "(m_barang.nama_rek_aset ilike '%"+g.Query("search[value]")+"%' OR inventaris.kode_barang like '%"+g.Query("search[value]")+"%' OR organisasi_pengguna.nama ilike '%"+g.Query("search[value]")+"%'"+
-				"OR inventaris.noreg = '"+g.Query("search[value]")+"' OR inventaris.perolehan ilike '%"+g.Query("search[value]")+"%' OR inventaris.kondisi ilike '%"+g.Query("search[value]")+"%')")
-		} else {
-			whereClause = append(whereClause, fmt.Sprintf("( inventaris.harga_satuan = %v", nilai)+" OR inventaris.tahun_perolehan = '"+g.Query("search[value]")+"' )")
+	if !export {
+		if g.Query("search[value]") != "" {
+			nilai, err := strconv.Atoi(g.Query("search[value]"))
+			if err != nil {
+				whereClause = append(whereClause, "(m_barang.nama_rek_aset ilike '%"+g.Query("search[value]")+"%' OR inventaris.kode_barang like '%"+g.Query("search[value]")+"%' OR organisasi_pengguna.nama ilike '%"+g.Query("search[value]")+"%'"+
+					"OR inventaris.noreg = '"+g.Query("search[value]")+"' OR inventaris.perolehan ilike '%"+g.Query("search[value]")+"%' OR inventaris.kondisi ilike '%"+g.Query("search[value]")+"%')")
+			} else {
+				whereClause = append(whereClause, fmt.Sprintf("( inventaris.harga_satuan = %v", nilai)+" OR inventaris.tahun_perolehan = '"+g.Query("search[value]")+"' )")
+			}
 		}
 	}
 
@@ -631,14 +689,39 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(g *gin.Context) ([]string,
 func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
 
 	inventaris := []getInvoiceResponse{}
+	q := QueryParamInventaris{}
 
 	whereClause := []string{}
 	whereClauseAccess := []string{}
 	depJoin := map[string]bool{}
 
-	// get the filter
+	t, _ := g.Get("token_info")
 
-	whereClause, depJoin = i.buildGetInventarisFilter(g)
+	q.Start = start
+	q.Limit = limit
+	q.CanDelete = canDelete
+	q.Published = g.Query("published")
+	q.ExceptIDInventaris = g.Query("except-id-inventaris")
+	q.PencarianKhusus = g.Query("pencarian_khusus")
+	q.PencarianKhususNilai = g.Query("pencarian_khusus_nilai")
+	q.PencarianKhususRange = g.Query("pencarian_khusus_range")
+	q.PencarianKhususRangeNilaiFrom = g.Query("pencarian_khusus_range_nilai_from")
+	q.PencarianKhususRangeNilaiTo = g.Query("pencarian_khusus_range_nilai_to")
+	q.JenisBarangs = g.Query("jenisbarangs")
+	q.KodeObjek = g.Query("kodeobjek")
+	q.KodeRincianObjek = g.Query("koderincianobjek")
+	q.PenggunaFilter = g.Query("penggunafilter")
+	q.KuasaPenggunaFilter = g.Query("kuasapengguna_filter")
+	q.SubKuasaFilter = g.Query("subkuasa_filter")
+	q.Draft = g.Query("draft")
+	q.StatusSensus = g.Query("status_sensus")
+	q.StatusVerifikasi = g.Query("status_verifikasi")
+	q.TokenUsername = t.(jwt.MapClaims)["username"].(string)
+	q.TokenOrg = t.(jwt.MapClaims)["org_id"].(float64)
+	q.TokenId = t.(jwt.MapClaims)["id"].(float64)
+
+	// get the filter
+	whereClause, depJoin = i.buildGetInventarisFilter(q, false, g)
 
 	sql := i.db
 	// Joins("join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
@@ -676,12 +759,9 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		sql = sql.Joins("join m_alamat as m_kecamatan ON m_kecamatan.id = inventaris.alamat_kecamatan")
 	}
 
-	organisasiLoggedIn := models.Organisasi{}
-
-	t, _ := g.Get("token_info")
-
 	// get organisasi
-	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", t.(jwt.MapClaims)["org_id"]))
+	organisasiLoggedIn := models.Organisasi{}
+	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", q.TokenOrg))
 	if sqlOrgTx.Error != nil {
 		return inventaris, 0, 0, sqlOrgTx.Error
 	}
@@ -787,6 +867,10 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Total int64
 	}
 
+	var countDataFiltered struct {
+		Total int64
+	}
+
 	redisCountAllKey := "inventaris-count-all"
 
 	if organisasiLoggedIn.Level > 0 {
@@ -821,14 +905,9 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Model(new(models.Inventaris)).
 		Where(strings.Join(whereClause, " AND "))
 
-	var countDataFiltered struct {
-		Total int64
-	}
-
 	// get from cache
 	err = i.redisCache.Get(context.TODO(), "inventaris-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
 	if err != nil && err != cache.ErrCacheMiss {
-
 		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
 	}
 
@@ -861,37 +940,184 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			"m_organisasi.nama as pengguna_barang",
 		}).
 		Where(strings.Join(whereClause, " AND ")).
-		Offset(start).
-		Limit(limit)
+		Offset(q.Start).Limit(q.Limit)
 
 	if order != "" {
 		sqlTx = sqlTx.Order(order)
 	}
-	sqlTx = sqlTx.Find(&inventaris)
 
-	for ind, _ := range inventaris {
+	if err := sqlTx.Find(&inventaris).Error; err != nil {
+		return nil, 0, 0, err
+	}
 
-		if canDelete {
-			inventaris[ind].CanDelete = canDelete
+	for _, dt := range inventaris {
+		if q.CanDelete {
+			dt.CanDelete = q.CanDelete
 		}
-		if !inventaris[ind].VerifikatorFlag {
-			if inventaris[ind].VerifikatorIsRevise {
-				inventaris[ind].StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
+		if !dt.VerifikatorFlag {
+			if dt.VerifikatorIsRevise {
+				dt.StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
 			} else {
-				if inventaris[ind].VerifikatorStatus == 0 {
-					inventaris[ind].StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
-				} else if inventaris[ind].VerifikatorStatus == 1 {
-					inventaris[ind].StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
-				} else if inventaris[ind].VerifikatorStatus == 2 {
-					inventaris[ind].StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+				if dt.VerifikatorStatus == 0 {
+					dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
+				} else if dt.VerifikatorStatus == 1 {
+					dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
+				} else if dt.VerifikatorStatus == 2 {
+					dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
 				}
 			}
 		} else {
-			inventaris[ind].StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+			dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
 		}
 	}
 
 	return inventaris, countDataFiltered.Total, countData.Total, sqlTx.Error
+}
+
+func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]models.ReportInventaris, error) {
+	inventaris := []models.ReportInventaris{}
+
+	whereClause := []string{}
+	whereClauseAccess := []string{}
+	depJoin := map[string]bool{}
+
+	g := &gin.Context{}
+
+	// get the filter
+	whereClause, depJoin = i.buildGetInventarisFilter(q, false, g)
+
+	sql := i.db.Model(&[]getInvoiceResponse{})
+
+	if depJoin["detil_tanah"] {
+		sql = sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
+	}
+	if depJoin["detil_mesin"] {
+		sql = sql.Joins("join detil_mesin ON detil_mesin.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_bangunan"]; ok {
+		sql = sql.Joins("join detil_bangunan ON detil_bangunan.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_aset_lainnya"]; ok {
+		sql = sql.Joins("join detil_aset_lainnya ON detil_aset_lainnya.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_jalan"]; ok {
+		sql = sql.Joins("join detil_jalan ON detil_jalan.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["detil_konstruksi"]; ok {
+		sql = sql.Joins("join detil_konstruksi ON detil_konstruksi.pidinventaris = inventaris.id")
+	}
+	if _, ok := depJoin["m_merk_barang"]; ok {
+		sql = sql.Joins("join m_merk_barang ON m_merk_barang.id = detil_mesin.merk")
+	}
+	if _, ok := depJoin["m_kota"]; ok {
+		sql = sql.Joins("join m_alamat as m_kota ON m_kota.id = inventaris.alamat_kota")
+	}
+	if _, ok := depJoin["m_kecamatan"]; ok {
+		sql = sql.Joins("join m_alamat as m_kecamatan ON m_kecamatan.id = inventaris.alamat_kecamatan")
+	}
+
+	// get organisasi
+	organisasiLoggedIn := models.Organisasi{}
+	sqlOrgTx := i.db.Find(&organisasiLoggedIn, fmt.Sprintf("id = %v", q.TokenOrg))
+	if sqlOrgTx.Error != nil {
+		return inventaris, sqlOrgTx.Error
+	}
+
+	sql = sql.Joins("left join m_organisasi as organisasi_pengguna ON organisasi_pengguna.id = inventaris.pidopd").
+		Joins("left join m_organisasi as organisasi_kuasa_pengguna ON organisasi_kuasa_pengguna.id = inventaris.pidopd_cabang").
+		Joins(" left join m_organisasi as organisasi_sub_kuasa_pengguna ON organisasi_sub_kuasa_pengguna.id = inventaris.pidupt")
+
+	if organisasiLoggedIn.Level == 0 {
+		idsOrg := []int{}
+
+		// get the children
+		level1Orgs := []models.Organisasi{}
+
+		sqlOrgLevel1 := i.db.Find(&level1Orgs, fmt.Sprintf("pid = %v", organisasiLoggedIn.ID))
+		if sqlOrgLevel1.Error != nil {
+			return inventaris, sqlOrgLevel1.Error
+		}
+
+		for _, org := range level1Orgs {
+			level2Orgs := []models.Organisasi{}
+			sqlOrgLevel2 := i.db.Find(&level2Orgs, fmt.Sprintf("pid = %v", org.ID))
+			if sqlOrgLevel2.Error != nil {
+				return inventaris, sqlOrgLevel2.Error
+			}
+			for _, org2 := range level1Orgs {
+				idsOrg = append(idsOrg, org2.ID)
+			}
+			idsOrg = append(idsOrg, org.ID)
+		}
+
+		elseIfSubKuasaPengguna := "true"
+
+		if len(idsOrg) > 0 {
+			elseIfSubKuasaPengguna = fmt.Sprintf("organisasi_sub_kuasa_pengguna.id IN (%v)", strings.Trim(strings.Join(strings.Split(fmt.Sprint(idsOrg), " "), ","), "[]"))
+		}
+
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
+			organisasi_pengguna.id = %v AND
+			(
+				(CASE WHEN organisasi_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_kuasa_pengguna.pid = %v END)
+				OR
+				(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE %s END)
+
+			)
+		`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, elseIfSubKuasaPengguna))
+
+	} else if organisasiLoggedIn.Level == 1 {
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
+		( organisasi_pengguna.id = %v AND organisasi_kuasa_pengguna.id = %v )
+		AND
+		(CASE WHEN organisasi_sub_kuasa_pengguna.id IS NULL THEN true ELSE organisasi_sub_kuasa_pengguna.pid = %v END)
+	`, organisasiLoggedIn.ID, organisasiLoggedIn.ID, organisasiLoggedIn.ID))
+
+	} else if organisasiLoggedIn.Level == 2 {
+		whereClauseAccess = append(whereClauseAccess, fmt.Sprintf(`
+			(organisasi_sub_kuasa_pengguna.id = %v) 
+		`, organisasiLoggedIn.ID))
+	}
+
+	sql = sql.Joins("join m_barang ON m_barang.id = inventaris.pidbarang").
+		Joins("join m_jenis_barang ON m_jenis_barang.kode = m_barang.kode_jenis").
+		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi")
+
+	whereClause = append(whereClause, whereClauseAccess...)
+
+	sqlTx := sql.
+		Select([]string{
+			"inventaris.*",
+			"m_barang.nama_rek_aset",
+			"m_jenis_barang.kelompok_kib",
+			"m_jenis_barang.nama as jenis",
+			"m_organisasi.nama as pengguna_barang",
+		}).
+		Where(strings.Join(whereClause, " AND "))
+
+	if err := sqlTx.Find(&inventaris).Error; err != nil {
+		return nil, err
+	}
+
+	for _, dt := range inventaris {
+		if !dt.VerifikatorFlag {
+			if dt.VerifikatorIsRevise {
+				dt.StatusVerifikasi = "Permintaan revisi data"
+			} else {
+				if dt.VerifikatorStatus == 0 {
+					dt.StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
+				} else if dt.VerifikatorStatus == 1 {
+					dt.StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
+				} else if dt.VerifikatorStatus == 2 {
+					dt.StatusVerifikasi = "Telah terverifikasi"
+				}
+			}
+		} else {
+			dt.StatusVerifikasi = "Telah terverifikasi"
+		}
+	}
+
+	return inventaris, sqlTx.Error
 }
 
 func (i *invoiceUseCaseImpl) GetFromElastic(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
@@ -960,5 +1186,129 @@ func (i *invoiceUseCaseImpl) GetFromElastic(limit, start int, g *gin.Context) (i
 	err = json.NewDecoder(res.Body).Decode(&countElastic)
 
 	return elasticResponse.Hits.Hits, int64(elasticResponse.Hits.Total.Value), countElastic.Count, nil
+}
 
+func (i *invoiceUseCaseImpl) SetRegisterQueue(g *gin.Context) (*models.TaskQueue, error) {
+
+	t, _ := g.Get("token_info")
+	id := t.(jwt.MapClaims)["id"].(float64)
+	folderPath := os.Getenv("FOLDER_REPORT")
+
+	// set filename
+	pidopd := g.Query("penggunafilter")
+	pidopd_cabang := g.Query("kuasapengguna_filter")
+	pidupt := g.Query("subkuasa_filter")
+
+	opdName := OpdName{}
+	opd := models.Organisasi{}
+	opdcabang := models.Organisasi{}
+	opdsubcabang := models.Organisasi{}
+
+	if pidopd != "" {
+		i.db.First(&opd, pidopd)
+		opdName.Pengguna = opd.Nama
+	}
+
+	if pidopd_cabang != "" {
+		i.db.First(&opdcabang, pidopd_cabang)
+		opdName.KuasaPengguna = opdcabang.Nama
+	}
+
+	if pidupt != "" {
+		i.db.First(&opdsubcabang, pidupt)
+		opdName.SubKuasaPengguna = opdsubcabang.Nama
+	}
+
+	username := t.(jwt.MapClaims)["username"].(string)
+	fileName := opdName.Pengguna + ":" + opdName.KuasaPengguna + ":" + opdName.SubKuasaPengguna + "-" + username
+
+	tq := models.TaskQueue{
+		TaskUUID:     uuid.NewString(),
+		TaskName:     "worker-export-inventaris",
+		TaskType:     "export_report",
+		Status:       "pending",
+		CreatedBy:    int(id),
+		CallbackLink: folderPath + "/inventaris/" + fileName,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := i.db.Create(&tq).Error; err != nil {
+		return nil, err
+	}
+
+	return &tq, nil
+}
+
+func (i *invoiceUseCaseImpl) SetUpdateStatusQueue(g *gin.Context) (interface{}, error) {
+
+	t, _ := g.Get("token_info")
+	id := t.(jwt.MapClaims)["id"].(float64)
+	folderPath := os.Getenv("FOLDER_REPORT")
+	folderName := INVEN_EXCEL_FILE_FOLDER
+
+	tq := models.TaskQueue{
+		TaskUUID:     uuid.NewString(),
+		TaskName:     "worker-export-inventaris",
+		TaskType:     "export_report",
+		Status:       "pending",
+		CreatedBy:    int(id),
+		CallbackLink: folderPath + "/" + folderName,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := i.db.Create(&tq).Error; err != nil {
+		return nil, err
+	}
+
+	return nil, nil
+}
+
+func (i *invoiceUseCaseImpl) GetOpdName(c string) OpdName {
+	var params QueryParamInventaris
+	opdName := OpdName{}
+
+	err := json.Unmarshal([]byte(c), &params)
+	if err != nil {
+		log.Println("Error unmarshalling JSON:", err)
+		return opdName
+	}
+
+	pidopd := ""
+	pidopd_cabang := ""
+	pidupt := ""
+
+	if params.PenggunaFilter != "" {
+		pidopd = params.PenggunaFilter
+	}
+
+	if params.KuasaPenggunaFilter != "" {
+		pidopd_cabang = params.KuasaPenggunaFilter
+	}
+
+	if params.SubKuasaFilter != "" {
+		pidupt = params.SubKuasaFilter
+	}
+
+	opd := models.Organisasi{}
+	opdcabang := models.Organisasi{}
+	opdsubcabang := models.Organisasi{}
+
+	if pidopd != "" {
+		i.db.First(&opd, pidopd)
+		opdName.Pengguna = opd.Nama
+	}
+
+	if pidopd_cabang != "" {
+		i.db.First(&opdcabang, pidopd_cabang)
+		opdName.KuasaPengguna = opdcabang.Nama
+	}
+
+	if pidupt != "" {
+		i.db.First(&opdsubcabang, pidupt)
+		opdName.SubKuasaPengguna = opdsubcabang.Nama
+	}
+
+	return opdName
 }

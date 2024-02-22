@@ -24,6 +24,20 @@ services:
     restart: always
     depends_on:
       - service-config
+    volumes:
+       - ./storage:/storage
+    networks:
+      - simada_default
+      - service_epersediaan_epersediaan
+  service-worker:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-worker/Dockerfile
+    restart: always
+    depends_on:
+      - service-config
+    volumes:
+      - ./storage:/storage
     networks:
       - simada_default
       - service_epersediaan_epersediaan
@@ -32,6 +46,8 @@ services:
       context: ./
       dockerfile: ./cmd/service-transaction/Dockerfile
     restart: always
+    volumes:
+      - ./storage:/storage
     depends_on:
       - service-config
     networks:
@@ -42,6 +58,8 @@ services:
       context: ./
       dockerfile: ./cmd/service-pipeline/Dockerfile
     restart: always
+    volumes:
+      - ./storage:/app/storage
     depends_on:
       - service-config
     networks:

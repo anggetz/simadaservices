@@ -24,10 +24,10 @@ func getLoggedInOrganisasi(tokenInfo jwt.MapClaims, dbgorm *gorm.DB) (*models.Or
 
 func buildInventarisAktifWhereClauseString() []string {
 	whereClauseAccess := []string{
-		fmt.Sprintf("inventaris.posting_flag IS TRUE"),
-		fmt.Sprintf("inventaris.deleted_at IS NULL"),
-		fmt.Sprintf("inventaris.verifikator_flag IS TRUE"),
-		fmt.Sprintf("inventaris.draft IS NULL"),
+		"inventaris.posting_flag IS TRUE",
+		"inventaris.deleted_at IS NULL",
+		"inventaris.verifikator_flag IS TRUE",
+		"inventaris.draft IS NULL",
 	}
 
 	return whereClauseAccess

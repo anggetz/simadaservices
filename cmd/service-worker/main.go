@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/adjust/rmq/v5"
+	"github.com/go-redis/cache/v9"
 	"github.com/joho/godotenv"
 	"github.com/nats-io/nats.go"
+	"github.com/redis/go-redis/v9"
 	cron "github.com/robfig/cron/v3"
 )
 
@@ -67,6 +69,23 @@ func setUpRedis() {
 
 }
 
+func setupRediCache() {
+	fmt.Println("connect to", fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port))
+
+	ring := redis.NewRing(&redis.RingOptions{
+		Addrs: map[string]string{
+			"server1": fmt.Sprintf("%s:%s", kernel.Kernel.Config.REDIS.Host, kernel.Kernel.Config.REDIS.Port),
+		},
+	})
+
+	mycache := cache.New(&cache.Options{
+		Redis:      ring,
+		LocalCache: cache.NewTinyLFU(1000, time.Minute),
+	})
+
+	kernel.Kernel.Config.REDIS.RedisCache = mycache
+}
+
 func main() {
 	// Create or open a log file for writing
 	currentTime := time.Now().Format("2006-01-02")
@@ -88,8 +107,12 @@ func main() {
 	kernel.Kernel = kernel.NewKernel()
 
 	// set scheduler berdasarkan zona waktu sesuai kebutuhan
-	jakartaTime, _ := time.LoadLocation("Asia/Jakarta")
-	scheduler := cron.New(cron.WithLocation(jakartaTime))
+	// jakartaTime, err :=
+	// if err != nil {
+	// 	log.Fatal("Error loading Asia Jakarta")
+	// }
+
+	scheduler := cron.New(cron.WithLocation(time.Local))
 	// stop scheduler tepat sebelum fungsi berakhir
 	defer scheduler.Stop()
 
@@ -119,19 +142,20 @@ func main() {
 
 	setUpDB()
 	setUpRedis()
+	setupRediCache()
 
 	db, _ := kernel.Kernel.Config.DB.Connection.DB()
 	defer db.Close()
 	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
 
-	new(queue.QueueImportInventaris).Register(connectionRedis)
+	new(queue.QueueExportInventaris).Register(connectionRedis)
 	new(queue.QueueExportBMDATL).Register(connectionRedis)
+	new(queue.QueueExportRekapitulasi).Register(connectionRedis)
 
 	// set task yang akan dijalankan scheduler
-	scheduler.AddFunc("27 10 * * *", func() {
+	scheduler.AddFunc("00 21 * * *", func() {
 		log.Println(">>> service worker : export bmd atl scheduler")
-		// rest.NewApi().ExportBmdAtl(&gin.Context{})
-		rest.NewApi().GetBmdAtl(connectionRedis)
+		rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
 	}) // SETIAP HARI PUKUL 9 malam setiap hari
 	go scheduler.Start()
 
