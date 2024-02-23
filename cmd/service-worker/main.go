@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"simadaservices/cmd/service-worker/kernel"
-	"simadaservices/cmd/service-worker/rest"
 	"simadaservices/pkg/queue"
 	"simadaservices/pkg/tools"
 	"syscall"
@@ -151,11 +150,12 @@ func main() {
 	new(queue.QueueExportInventaris).Register(connectionRedis)
 	new(queue.QueueExportBMDATL).Register(connectionRedis)
 	new(queue.QueueExportRekapitulasi).Register(connectionRedis)
+	new(queue.QueueExportMutasiBMD).Register(connectionRedis)
 
 	// set task yang akan dijalankan scheduler
 	scheduler.AddFunc("00 21 * * *", func() {
-		log.Println(">>> service worker : export bmd atl scheduler")
-		rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
+		// log.Println(">>> service worker : export bmd atl scheduler")
+		// rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
 	}) // SETIAP HARI PUKUL 9 malam setiap hari
 	go scheduler.Start()
 

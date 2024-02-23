@@ -10,9 +10,11 @@ import (
 	usecase "simadaservices/pkg/usecase"
 	usecase2 "simadaservices/pkg/usecase/report"
 	"strconv"
+	"strings"
 
 	"github.com/adjust/rmq/v5"
 	"github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
@@ -53,7 +55,19 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 	folderReport := INVEN_EXCEL_FILE_FOLDER
 	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
 	timestr := t.DB.NowFunc().Format(INVEN_FORMAT_FILE_TIME)
-	fileName := opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + "-" + params.TokenUsername + "_" + timestr
+	fileName := ""
+	if opdname.Pengguna != "" {
+		fileName = fileName + strings.ReplaceAll(opdname.Pengguna, " ", "_")
+	} else {
+		fileName = "Inventaris"
+	}
+	if opdname.KuasaPengguna != "" {
+		fileName = fileName + "|" + strings.ReplaceAll(opdname.KuasaPengguna, " ", "_")
+	}
+	if opdname.SubKuasaPengguna != "" {
+		fileName = fileName + "|" + strings.ReplaceAll(opdname.SubKuasaPengguna, " ", "_")
+	}
+	fileName = fileName + "_" + timestr
 
 	defer func(errors error) {
 		if errors != nil {
@@ -64,6 +78,15 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 			tq := models.TaskQueue{}
 			t.DB.First(&tq, "id = ?", params.QueueId)
 			tq.Status = "success"
+			if tq.TaskName == "" {
+				tq.TaskName = "worker-export-" + INVEN_EXCEL_FILE_FOLDER
+			}
+			if tq.TaskType == "" {
+				tq.TaskType = "export_report"
+			}
+			if tq.TaskUUID == "" {
+				tq.TaskUUID = uuid.NewString()
+			}
 			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
 			tq.UpdatedAt = t.DB.NowFunc()
 			if err := t.DB.Save(&tq).Error; err != nil {
