@@ -69,7 +69,7 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 	opdname := usecase.OpdName{}
 	opdname = usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetOpdName(d.Payload())
 
-	timestr := t.DB.NowFunc().Format(ATL_FORMAT_FILE_TIME)
+	timestr := t.DB.NowFunc().Local().Format(ATL_FORMAT_FILE_TIME)
 	folderPath := os.Getenv("FOLDER_REPORT")
 	folderReport := ATL_EXCEL_FILE_FOLDER
 	fileName := ""
@@ -105,23 +105,23 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 				tq.TaskUUID = uuid.NewString()
 			}
 			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
-			tq.UpdatedAt = t.DB.NowFunc()
+			tq.UpdatedAt = t.DB.NowFunc().Local()
 			if err := t.DB.Save(&tq).Error; err != nil {
 				log.Println("failed to update task")
 			}
 		}
 	}(err)
 
-	startTime := t.DB.NowFunc()
+	startTime := t.DB.NowFunc().Local()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
 	// report := []models.ReportMDBATL{}
 	report, _, _, _, _, _ := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
 		params.Penggunafilter, params.F_Kuasapengguna_Filter, params.Kuasapengguna_Filter, params.F_Subkuasa_Filter, params.Subkuasa_Filter,
 		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw, params.F_Jenisperiode)
-	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> RES DATA : ", t.DB.NowFunc().Local().String())
 
-	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().String())
+	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().Local().String())
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
@@ -144,7 +144,7 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 		Alignment: &excelize.Alignment{Horizontal: "center"},
 	})
 
-	log.Println(" -->> START INSERT DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> START INSERT DATA : ", t.DB.NowFunc().Local().String())
 	// Set the header row and make it bold
 	cellName := ""
 	addData := 1
@@ -223,9 +223,9 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 		no++
 		totalRows++
 	}
-	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().Local().String())
 
-	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().Local().String())
 	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
@@ -235,7 +235,7 @@ func (t *TaskExportBMDATL) Consume(d rmq.Delivery) {
 		}
 		return
 	}
-	endTime := t.DB.NowFunc()
+	endTime := t.DB.NowFunc().Local()
 	duration := endTime.Sub(startTime)
 	log.Println(" -->> Duration : ", duration.String())
 	log.Println("->> END EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())

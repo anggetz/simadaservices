@@ -47,6 +47,8 @@ func main() {
 
 	kernel.Kernel.Config.ELASTIC.Address = os.Getenv("ELASTIC_ADDRESS")
 
+	fmt.Println(kernel.Kernel.Config.DB.Host)
+
 	confMarshalled, err := json.Marshal(kernel.Kernel.Config)
 	if err != nil {
 		panic(err)

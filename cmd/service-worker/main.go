@@ -157,6 +157,10 @@ func main() {
 		// log.Println(">>> service worker : export bmd atl scheduler")
 		// rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
 	}) // SETIAP HARI PUKUL 9 malam setiap hari
+	scheduler.AddFunc("01 0 * * *", func() {
+		// log.Println(">>> service worker : reminder penggunaan sementara")
+		// rest.NewApi().GetReminderPenggunaanSementara(kernel.Kernel.Config.DB.Connection, connectionRedis)
+	}) // SETIAP HARI PUKUL 00 lebih 1 menit malam setiap hari
 	go scheduler.Start()
 
 	fmt.Println("service worker already running")
