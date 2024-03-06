@@ -104,7 +104,7 @@ func (a *InvoiceImpl) Get(g *gin.Context) {
 			"penggunafilter":                    g.Query("penggunafilter"),
 			"kuasapengguna_filter":              g.Query("kuasapengguna_filter"),
 			"subkuasa_filter":                   g.Query("subkuasa_filter"),
-			"draft":                             "0",
+			"draft":                             g.Query("draft"),
 			"status_sensus":                     g.Query("status_sensus"),
 			"status_verifikasi":                 g.Query("status_verifikasi"),
 			"queue_id":                          tq.ID,
