@@ -14,6 +14,7 @@ import (
 
 	"github.com/adjust/rmq/v5"
 	"github.com/go-redis/cache/v9"
+	"github.com/google/uuid"
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 )
@@ -83,8 +84,17 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 			tq := models.TaskQueue{}
 			t.DB.First(&tq, "id = ?", params.QueueId)
 			tq.Status = "success"
+			if tq.TaskName == "" {
+				tq.TaskName = "worker-export-" + INVEN_EXCEL_FILE_FOLDER
+			}
+			if tq.TaskType == "" {
+				tq.TaskType = "export_report"
+			}
+			if tq.TaskUUID == "" {
+				tq.TaskUUID = uuid.NewString()
+			}
 			tq.CallbackLink = fmt.Sprintf("%s/%s/%s", folderPath, folderReport, fileName)
-			tq.UpdatedAt = t.DB.NowFunc()
+			tq.UpdatedAt = t.DB.NowFunc().Local()
 			if err := t.DB.Save(&tq).Error; err != nil {
 				log.Println("failed to update task")
 			}
@@ -93,7 +103,7 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 
 	fmt.Println("performing task report inventaris", params.Draft)
 
-	startTime := t.DB.NowFunc()
+	startTime := t.DB.NowFunc().Local()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
 	report, err := usecase.NewInventarisUseCase().
@@ -106,8 +116,8 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		return
 	}
 
-	log.Println(" -->> RES DATA : ", t.DB.NowFunc().String())
-	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().String())
+	log.Println(" -->> RES DATA : ", t.DB.NowFunc().Local().String())
+	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().Local().String())
 
 	f := excelize.NewFile()
 	defer func() {
@@ -128,7 +138,7 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		Alignment: &excelize.Alignment{Horizontal: "center"},
 	})
 
-	log.Println(" -->> START INSERT DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> START INSERT DATA : ", t.DB.NowFunc().Local().String())
 	// Set the header row and make it bold
 	cellName := ""
 	addData := 1
@@ -178,9 +188,9 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		no++
 		totalRows++
 	}
-	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().Local().String())
 
-	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().String())
+	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().Local().String())
 	// fileName := " Export Inventaris " + "-" + strconv.Itoa(params.QueueId) + "-" + timestr
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
@@ -190,7 +200,7 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		}
 		return
 	}
-	endTime := t.DB.NowFunc()
+	endTime := t.DB.NowFunc().Local()
 	duration := endTime.Sub(startTime)
 	log.Println(" -->> Duration : ", duration.String())
 	log.Println("->> END EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())

@@ -2,6 +2,7 @@ package rest
 
 import (
 	"simadaservices/cmd/service-report/rest"
+	"simadaservices/pkg/usecase"
 
 	"github.com/adjust/rmq/v5"
 	"gorm.io/gorm"
@@ -31,4 +32,10 @@ func (a *Api) GetBmdAtl(dbConnection *gorm.DB, connection rmq.Connection) {
 	params["draw"] = "1"
 
 	rest.NewApi().CronExportBmdAtl(dbConnection, connection, params)
+}
+
+func (a *Api) GetReminderPenggunaanSementara(dbConnection *gorm.DB, connection rmq.Connection) {
+
+	usecase.WorkerUseCase(dbConnection, connection).ReminderPenggunaanSementara()
+
 }

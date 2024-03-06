@@ -134,6 +134,8 @@ func main() {
 
 	// register router
 	apiGroup := r.Group("/v1/report").Use(middlewares.NewMiddlewareAuth(nc).TokenValidate)
+
+	// inventaris
 	apiGroup.GET("/get-inventaris", rest.NewApi().GetInventaris)
 
 	// rekapitulasi
@@ -141,10 +143,20 @@ func main() {
 	apiGroup.GET("/get-total-rekapitulasi", rest.NewApi().GetTotalRekapitulasi)
 	apiGroup.GET("/export-rekapitulasi", rest.NewApi().ExportRekapitulasi)
 
+	// rekapitulasi
+	apiGroup.GET("/get-mutasibmd", rest.NewApi().GetMutasiBmd)
+	apiGroup.GET("/get-total-mutasibmd", rest.NewApi().GetTotalMutasiBmd)
+	apiGroup.GET("/export-mutasibmd", rest.NewApi().ExportMutasiBmd)
+
 	// bmdatl
 	apiGroup.GET("/get-bmdatl", rest.NewApi().GetBmdAtl)
 	apiGroup.GET("/get-total-bmdatl", rest.NewApi().GetTotalBmdAtl)
 	apiGroup.GET("/export-bmdatl", rest.NewApi().ExportBmdAtl)
+
+	// bmdtanah
+	apiGroup.GET("/get-bmdtanah", rest.NewApi().GetBmdTanah)
+	apiGroup.GET("/get-total-bmdtanah", rest.NewApi().GetTotalBmdTanah)
+	apiGroup.GET("/export-bmdtanah", rest.NewApi().ExportBmdTanah)
 
 	// FILE EXPORT
 	r.GET("/v1/report/download-file", rest.NewApi().GetFileExport)

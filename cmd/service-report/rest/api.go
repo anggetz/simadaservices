@@ -107,6 +107,7 @@ func (a *Api) ExportRekapitulasi(g *gin.Context) {
 		"firstload":              g.Query("firstload"),
 		"draw":                   g.Query("draw"),
 		"f_jenisrekap":           g.Query("f_jenisrekap"),
+		"f_jenisperiode":         g.Query("f_jenisperiode"),
 		"queue_id":               tq.ID,
 	}
 
@@ -240,6 +241,7 @@ func (a *Api) ExportBmdAtl(g *gin.Context) {
 		"action":                 g.Query("action"),
 		"firstload":              g.Query("firstload"),
 		"draw":                   g.Query("draw"),
+		"f_jenisperiode":         g.Query("f_jenisperiode"),
 		"queue_id":               tq.ID,
 	}
 
@@ -370,15 +372,6 @@ func (a *Api) CronExportBmdAtl(dbConnection *gorm.DB, connection rmq.Connection,
 		return
 	}
 
-	// insert record into task_queue table
-	// tq, err := usecase.
-	// 	ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g)
-
-	// if err != nil {
-	// 	log.Println("Error insert task queue: ", err.Error())
-	// 	return
-	// }
-
 	payload := map[string]interface{}{
 		"f_periode":              params["f_periode"],
 		"f_penggunafilter":       params["f_penggunafilter"],
@@ -478,6 +471,250 @@ func (a *Api) CronExportBmdAtl(dbConnection *gorm.DB, connection rmq.Connection,
 			}
 		}
 	}
+
+	// return
+}
+
+func (a *Api) GetBmdTanah(g *gin.Context) {
+	log.Println("start >> get bmd tanah")
+	start, _ := strconv.Atoi(g.Query("start"))
+	length, _ := strconv.Atoi(g.Query("length"))
+	// action := g.Query("action")
+
+	data, recordsTotal, recordsFiltered, draw, summary_perpage, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).Get(start, length, "", g)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	g.JSON(200, tools.HttpResponseReport{
+		Message:         "success get data",
+		Data:            data,
+		RecordsTotal:    recordsTotal,
+		RecordsFiltered: recordsFiltered,
+		Draw:            draw,
+		SummaryPerPage:  summary_perpage,
+	})
+
+	log.Println("end >> get bmd tanah")
+	// return
+}
+
+func (a *Api) GetTotalBmdTanah(g *gin.Context) {
+	start, _ := strconv.Atoi(g.Query("start"))
+	length, _ := strconv.Atoi(g.Query("length"))
+
+	summary_page, err := usecase.NewReportATLUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).GetTotal(start, length, g)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	g.JSON(200, tools.HttpResponseReport{
+		Message: "success get data",
+		Data:    summary_page,
+	})
+	// return
+}
+
+func (a *Api) ExportBmdTanah(g *gin.Context) {
+	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
+	preQueueWorkerExcel, err := connectionRedis.OpenQueue(queue.QUEUE_EXPORT_EXCEL_BMDATL)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	// insert record into task_queue table
+	tq, err := usecase.
+		ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g, "bmdatl")
+
+	if err != nil {
+		log.Println("Error insert task queue: ", err.Error())
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	payload := map[string]interface{}{
+		"f_periode":              g.Query("f_periode"),
+		"f_penggunafilter":       g.Query("f_penggunafilter"),
+		"penggunafilter":         g.Query("penggunafilter"),
+		"f_kuasapengguna_filter": g.Query("f_kuasapengguna_filter"),
+		"kuasapengguna_filter":   g.Query("kuasapengguna_filter"),
+		"f_subkuasa_filter":      g.Query("f_subkuasa_filter"),
+		"subkuasa_filter":        g.Query("subkuasa_filter"),
+		"f_tahun":                g.Query("f_tahun"),
+		"f_bulan":                g.Query("f_bulan"),
+		"f_jenis":                g.Query("f_jenisrekap"),
+		"action":                 g.Query("action"),
+		"firstload":              g.Query("firstload"),
+		"draw":                   g.Query("draw"),
+		"f_jenisperiode":         g.Query("f_jenisperiode"),
+		"queue_id":               tq.ID,
+	}
+
+	fmt.Println(">>> payload : ", payload)
+	if g.Query("f_kuasapengguna_filter") != "" {
+		fmt.Println(">>> have kuasa filtered")
+		params, _ := json.Marshal(payload)
+		err = preQueueWorkerExcel.PublishBytes(params)
+		if err != nil {
+			g.JSON(400, err.Error())
+			g.Abort()
+			return
+		}
+	} else {
+		fmt.Println(">>> not have kuasa filtered")
+		pengguna, _ := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetPengguna()
+		for _, v := range pengguna {
+			opd, total, err := usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetTotalOpd(strconv.Itoa(v.ID))
+
+			if err != nil {
+				g.JSON(400, err.Error())
+				g.Abort()
+				return
+			}
+			// check opd have opd_cabang ?
+			if total > 0 {
+				fmt.Println(">>> have kuasa loop data", total)
+
+				for _, v := range opd {
+					payload["f_kuasapengguna_filter"] = strconv.Itoa(v.ID)
+					payload["kuasapengguna_filter"] = strconv.Itoa(v.ID)
+					fmt.Println(">>> kuasa : ", v.ID, " => ", v.Nama)
+
+					params, _ := json.Marshal(payload)
+					err = preQueueWorkerExcel.PublishBytes(params)
+					if err != nil {
+						g.JSON(400, err.Error())
+						g.Abort()
+						return
+					}
+				}
+			} else {
+				fmt.Println(">>> just data opd")
+
+				params, _ := json.Marshal(payload)
+				err = preQueueWorkerExcel.PublishBytes(params)
+				if err != nil {
+					g.JSON(400, err.Error())
+					g.Abort()
+					return
+				}
+			}
+		}
+	}
+
+	g.JSON(200, tools.Response{
+		Data:    tq,
+		Message: "process exporting data ",
+	})
+
+	// return
+}
+
+func (a *Api) GetMutasiBmd(g *gin.Context) {
+	log.Println("start >> get mutasi bmd")
+	start, _ := strconv.Atoi(g.Query("start"))
+	length, _ := strconv.Atoi(g.Query("length"))
+	// action := g.Query("action")
+
+	data, recordsTotal, recordsFiltered, draw, summary_perpage, err := usecase.NewReportMutasiBMDUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).Get(start, length, g)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	g.JSON(200, tools.HttpResponseReport{
+		Message:         "success get data",
+		Data:            data,
+		RecordsTotal:    recordsTotal,
+		RecordsFiltered: recordsFiltered,
+		Draw:            draw,
+		SummaryPerPage:  summary_perpage,
+	})
+
+	log.Println("end >> get mutasi bmd")
+	// return
+}
+
+func (a *Api) GetTotalMutasiBmd(g *gin.Context) {
+	start, _ := strconv.Atoi(g.Query("start"))
+	length, _ := strconv.Atoi(g.Query("length"))
+
+	summary_page, err := usecase.NewReportMutasiBMDUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.Cache).GetTotal(start, length, g)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	g.JSON(200, tools.HttpResponseReport{
+		Message: "success get data",
+		Data:    summary_page,
+	})
+	// return
+}
+
+func (a *Api) ExportMutasiBmd(g *gin.Context) {
+	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
+	preQueueWorkerExcel, err := connectionRedis.OpenQueue(queue.QUEUE_EXPORT_EXCEL_MUTASIBMD)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	// insert record into task_queue table
+	tq, err := usecase.
+		ReportUseCase(kernel.Kernel.Config.DB.Connection).SetRegisterQueue(g, "mutasibmd")
+
+	if err != nil {
+		log.Println("Error insert task queue: ", err.Error())
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	payload := map[string]interface{}{
+		"f_periode":              g.Query("f_periode"),
+		"f_penggunafilter":       g.Query("f_penggunafilter"),
+		"penggunafilter":         g.Query("penggunafilter"),
+		"f_kuasapengguna_filter": g.Query("f_kuasapengguna_filter"),
+		"kuasapengguna_filter":   g.Query("kuasapengguna_filter"),
+		"f_subkuasa_filter":      g.Query("f_subkuasa_filter"),
+		"subkuasa_filter":        g.Query("subkuasa_filter"),
+		"f_tahun":                g.Query("f_tahun"),
+		"f_bulan":                g.Query("f_bulan"),
+		"f_jenis":                g.Query("f_jenisrekap"),
+		"action":                 g.Query("action"),
+		"firstload":              g.Query("firstload"),
+		"draw":                   g.Query("draw"),
+		"f_jenisperiode":         g.Query("f_jenisperiode"),
+		"f_kode_jenis":           g.Query("f_jenisbarangs_filter"),
+		"f_kode_objek":           g.Query("f_kodeobjek_filter"),
+		"f_kode_rincian_objek":   g.Query("f_koderincianobjek_filter"),
+		"queue_id":               tq.ID,
+	}
+
+	fmt.Println(">>> payload : ", payload)
+	params, _ := json.Marshal(payload)
+	err = preQueueWorkerExcel.PublishBytes(params)
+	if err != nil {
+		g.JSON(400, err.Error())
+		g.Abort()
+		return
+	}
+
+	g.JSON(200, tools.Response{
+		Data:    tq,
+		Message: "process exporting data ",
+	})
 
 	// return
 }

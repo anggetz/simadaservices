@@ -30,17 +30,37 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 	pidopd := ""
 	pidopd_cabang := ""
 	pidupt := ""
+	tglakhir := ""
 
-	if g.Query("f_periode") == "1" {
-		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
-	} else if g.Query("f_periode") == "2" {
-		tgl = g.Query("f_tahun") + "-03"
-	} else if g.Query("f_periode") == "3" {
-		tgl = g.Query("f_tahun") + "-06"
-	} else if g.Query("f_periode") == "4" {
-		tgl = g.Query("f_tahun") + "-09"
-	} else if g.Query("f_periode") == "5" {
-		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
+	if g.Query("f_jenisperiode") == "1" { // semua
+		if g.Query("f_periode") == "1" {
+			tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
+		} else if g.Query("f_periode") == "2" {
+			tgl = g.Query("f_tahun") + "-03"
+		} else if g.Query("f_periode") == "3" {
+			tgl = g.Query("f_tahun") + "-06"
+		} else if g.Query("f_periode") == "4" {
+			tgl = g.Query("f_tahun") + "-09"
+		} else if g.Query("f_periode") == "5" {
+			tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
+		}
+	} else { // range
+		if g.Query("f_periode") == "1" { // bulan
+			tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-01"
+			tglakhir = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-31"
+		} else if g.Query("f_periode") == "2" { // triwulan 1 (1 januari - 31 maret)
+			tgl = g.Query("f_tahun") + "-01-01"
+			tglakhir = g.Query("f_tahun") + "-03-31"
+		} else if g.Query("f_periode") == "3" { // semester 1 (1 januari - 31 juni)
+			tgl = g.Query("f_tahun") + "-01-01"
+			tglakhir = g.Query("f_tahun") + "-06-30"
+		} else if g.Query("f_periode") == "4" { // triwulan 3 (1 juli - 30 september)
+			tgl = g.Query("f_tahun") + "-07-01"
+			tglakhir = g.Query("f_tahun") + "-09-30"
+		} else if g.Query("f_periode") == "5" { // tahun  (1 januari - 31 desember)
+			tgl = g.Query("f_tahun") + "-01-01"
+			tglakhir = g.Query("f_tahun") + "-12-31"
+		}
 	}
 
 	// firstload, _ := strconv.ParseBool(g.Query("firstload"))
@@ -61,7 +81,7 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 	}
 
 	if g.Query("f_subkuasa_filter") != "" {
-		pidopd = g.Query("f_subkuasa_filter")
+		pidupt = g.Query("f_subkuasa_filter")
 	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
@@ -72,26 +92,47 @@ func (i *reportRekapitulasiUseCase) Get(start int, limit int, g *gin.Context) ([
 	bulan := g.Query("f_bulan")
 	draw := g.Query("draw")
 	jenisrekap := g.Query("f_jenisrekap")
+	jenisperiode := g.Query("f_jenisperiode")
 
-	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenisrekap, "")
+	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenisrekap, "", jenisperiode, tglakhir)
 }
 
-func (i *reportRekapitulasiUseCase) Export(start int, limit int, f_periode string, f_penggunafilter string, penggunafilter string, f_kuasapengguna_filter string, kuasapengguna_filter string, f_subkuasa_filter string, subkuasa_filter string, f_tahun string, f_bulan string, f_jenis string, action string, firstload string, draw string, jenisrekap string) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
+func (i *reportRekapitulasiUseCase) Export(start int, limit int, f_periode string, f_penggunafilter string, penggunafilter string, f_kuasapengguna_filter string, kuasapengguna_filter string, f_subkuasa_filter string, subkuasa_filter string, f_tahun string, f_bulan string, f_jenis string, action string, firstload string, draw string, jenisrekap string, jenisperiode string) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
 	pidupt := ""
+	tglakhir := ""
 
-	if f_periode == "1" {
-		tgl = f_tahun + "-" + f_bulan
-	} else if f_periode == "2" {
-		tgl = f_tahun + "-03"
-	} else if f_periode == "3" {
-		tgl = f_tahun + "-06"
-	} else if f_periode == "4" {
-		tgl = f_tahun + "-09"
-	} else if f_periode == "5" {
-		tgl = f_tahun + "-" + f_bulan
+	if jenisperiode == "1" {
+		if f_periode == "1" {
+			tgl = f_tahun + "-" + f_bulan
+		} else if f_periode == "2" {
+			tgl = f_tahun + "-03"
+		} else if f_periode == "3" {
+			tgl = f_tahun + "-06"
+		} else if f_periode == "4" {
+			tgl = f_tahun + "-09"
+		} else if f_periode == "5" {
+			tgl = f_tahun + "-" + f_bulan
+		}
+	} else {
+		if f_periode == "1" {
+			tgl = f_tahun + "-" + f_bulan + "-01"
+			tglakhir = f_tahun + "-" + f_bulan + "-31"
+		} else if f_periode == "2" {
+			tgl = f_tahun + "-01-01"
+			tglakhir = f_tahun + "-03-31"
+		} else if f_periode == "3" {
+			tgl = f_tahun + "-01-01"
+			tglakhir = f_tahun + "-06-30"
+		} else if f_periode == "4" {
+			tgl = f_tahun + "-07-01"
+			tglakhir = f_tahun + "-09-30"
+		} else if f_periode == "5" {
+			tgl = f_tahun + "-01-01"
+			tglakhir = f_tahun + "-12-31"
+		}
 	}
 
 	if f_penggunafilter != "" {
@@ -111,27 +152,25 @@ func (i *reportRekapitulasiUseCase) Export(start int, limit int, f_periode strin
 	}
 
 	if f_subkuasa_filter != "" {
-		pidopd = f_subkuasa_filter
+		pidupt = f_subkuasa_filter
 	} else {
 		if subkuasa_filter != "" {
 			pidupt = subkuasa_filter
 		}
 	}
 
-	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, f_tahun, f_bulan, draw, jenisrekap, "export")
+	return i.GetData(start, limit, tgl, pidopd, pidopd_cabang, pidupt, f_tahun, f_bulan, draw, jenisrekap, "export", jenisperiode, tglakhir)
 }
 
-func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenisrekap string, jenis string) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
+func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenisrekap string, jenis string, jenisperiode string, tglakhir string) ([]models.ResponseRekapitulasi, int64, int64, int64, interface{}, error) {
 	inventaris := []models.ResponseRekapitulasi{}
-
-	log.Println(tgl, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenisrekap, jenis)
 
 	tahun_sk, _ := strconv.Atoi(tahun)
 	tahun_sb, _ := strconv.Atoi(tahun)
 	tahun_sb = tahun_sb - 1
 
 	// pre query
-	params := i.db.Raw(`select ? tahun_sekarang, ? tahun_sebelum, ?::text tanggal, ?::text pidopd, ?::text pidopd_cabang, ?::text pidupt`, tahun_sk, tahun_sb, tgl, pidopd, pidopd_cabang, pidupt)
+	params := i.db.Raw(`select ? tahun_sekarang, ? tahun_sebelum, ?::text tanggal, ?::text pidopd, ?::text pidopd_cabang, ?::text pidupt, ?::text jenis_periode, ?::text tglakhir `, tahun_sk, tahun_sb, tgl, pidopd, pidopd_cabang, pidupt, jenisperiode, tglakhir)
 	penyusutan := i.db.Raw(`select inventaris_id, sum(penyusutan_sd_tahun_sekarang) penyusutan_sd_tahun_sekarang,
 	sum(beban_penyusutan) beban_penyusutan, sum(nilai_buku) nilai_buku,sum(penyusutan_sd_tahun_sebelumnya) penyusutan_sd_tahun_sebelumnya
 	from getpenyusutan(?::int, ?::int) group by 1`, tahun_sk, tahun_sb)
@@ -178,8 +217,12 @@ func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pi
 		Where(`(rp.pidopd::TEXT = pr.pidopd OR TRIM(BOTH FROM pr.pidopd) = '') 
 				AND (rp.pidopd_cabang::TEXT = pr.pidopd_cabang OR TRIM(BOTH FROM pr.pidopd_cabang) = '') 
 				AND (rp.pidupt::TEXT = pr.pidupt OR TRIM(BOTH FROM pr.pidupt) = '') 
-				AND TO_CHAR(rp.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal 
 				AND rp.draft is null `)
+	if jenisperiode == "1" {
+		sqlQuery = sqlQuery.Where(" TO_CHAR(rp.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal ")
+	} else {
+		sqlQuery = sqlQuery.Where("rp.tgl_dibukukan >= CAST(pr.tanggal AS date)").Where("rp.tgl_dibukukan <= ?", tglakhir)
+	}
 
 	if jenisrekap == "1" {
 		sqlQuery = sqlQuery.Group("b.nama_rek_aset, rp.kode_jenis ").Order("rp.kode_jenis")
@@ -213,8 +256,13 @@ func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pi
 		(rp.pidopd::TEXT = '%s' OR TRIM(BOTH FROM '%s' ) = '') 
 		AND (rp.pidopd_cabang::TEXT = '%s' OR TRIM(BOTH FROM '%s') = '') 
 		AND (rp.pidupt::TEXT = '%s' OR TRIM(BOTH FROM '%s') = '') 
-		AND TO_CHAR(rp.tgl_dibukukan, 'yyyy-mm') <= '%s' 
-		AND rp.draft is null `, pidopd, pidopd, pidopd_cabang, pidopd_cabang, pidupt, pidupt, tgl)
+		AND rp.draft is null `, pidopd, pidopd, pidopd_cabang, pidopd_cabang, pidupt, pidupt)
+
+	if jenisperiode == "1" {
+		strWhere = fmt.Sprintf(`%s AND TO_CHAR(rp.tgl_dibukukan, 'yyyy-mm') <= '%s' `, strWhere, tgl)
+	} else {
+		strWhere = fmt.Sprintf(`%s AND rp.tgl_dibukukan <= '%s' AND rp.tgl_dibukukan >= '%s'`, strWhere, tgl, tglakhir)
+	}
 
 	// get from cache
 	err := i.redisCache.Get(context.TODO(), "rekapitulasi-count"+strWhere, &countData)
@@ -263,17 +311,37 @@ func (i *reportRekapitulasiUseCase) GetTotal(start int, limit int, g *gin.Contex
 	pidopd := ""
 	pidopd_cabang := ""
 	pidupt := ""
+	tglakhir := ""
 
-	if g.Query("f_periode") == "1" {
-		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
-	} else if g.Query("f_periode") == "2" {
-		tgl = g.Query("f_tahun") + "-03"
-	} else if g.Query("f_periode") == "3" {
-		tgl = g.Query("f_tahun") + "-06"
-	} else if g.Query("f_periode") == "4" {
-		tgl = g.Query("f_tahun") + "-09"
-	} else if g.Query("f_periode") == "5" {
-		tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
+	if g.Query("f_jenisperiode") == "1" { // semua
+		if g.Query("f_periode") == "1" {
+			tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
+		} else if g.Query("f_periode") == "2" {
+			tgl = g.Query("f_tahun") + "-03"
+		} else if g.Query("f_periode") == "3" {
+			tgl = g.Query("f_tahun") + "-06"
+		} else if g.Query("f_periode") == "4" {
+			tgl = g.Query("f_tahun") + "-09"
+		} else if g.Query("f_periode") == "5" {
+			tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan")
+		}
+	} else { // range
+		if g.Query("f_periode") == "1" { // bulan
+			tgl = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-01"
+			tglakhir = g.Query("f_tahun") + "-" + g.Query("f_bulan") + "-31"
+		} else if g.Query("f_periode") == "2" { // triwulan 1 (1 januari - 31 maret)
+			tgl = g.Query("f_tahun") + "-01-01"
+			tglakhir = g.Query("f_tahun") + "-03-31"
+		} else if g.Query("f_periode") == "3" { // semester 1 (1 januari - 31 juni)
+			tgl = g.Query("f_tahun") + "-01-01"
+			tglakhir = g.Query("f_tahun") + "-06-30"
+		} else if g.Query("f_periode") == "4" { // triwulan 3 (1 juli - 30 september)
+			tgl = g.Query("f_tahun") + "-07-01"
+			tglakhir = g.Query("f_tahun") + "-09-30"
+		} else if g.Query("f_periode") == "5" { // tahun  (1 januari - 31 desember)
+			tgl = g.Query("f_tahun") + "-01-01"
+			tglakhir = g.Query("f_tahun") + "-12-31"
+		}
 	}
 
 	// firstload, _ := strconv.ParseBool(g.Query("firstload"))
@@ -294,7 +362,7 @@ func (i *reportRekapitulasiUseCase) GetTotal(start int, limit int, g *gin.Contex
 	}
 
 	if g.Query("f_subkuasa_filter") != "" {
-		pidopd = g.Query("f_subkuasa_filter")
+		pidupt = g.Query("f_subkuasa_filter")
 	} else {
 		if g.Query("subkuasa_filter") != "" {
 			pidupt = g.Query("subkuasa_filter")
@@ -322,8 +390,13 @@ func (i *reportRekapitulasiUseCase) GetTotal(start int, limit int, g *gin.Contex
 		(reportrekap.pidopd::TEXT = '%s' OR TRIM(BOTH FROM '%s' ) = '') 
 		AND (reportrekap.pidopd_cabang::TEXT = '%s' OR TRIM(BOTH FROM '%s') = '') 
 		AND (reportrekap.pidupt::TEXT = '%s' OR TRIM(BOTH FROM '%s') = '') 
-		AND TO_CHAR(reportrekap.tgl_dibukukan, 'yyyy-mm') <= '%s' 
-		AND reportrekap.draft is null `, pidopd, pidopd, pidopd_cabang, pidopd_cabang, pidupt, pidupt, tgl)
+		AND reportrekap.draft is null `, pidopd, pidopd, pidopd_cabang, pidopd_cabang, pidupt, pidupt)
+
+	if g.Query("f_jenisperiode") == "1" {
+		strWhere = fmt.Sprintf(`%s AND TO_CHAR(reportrekap.tgl_dibukukan, 'yyyy-mm') <= '%s'`, strWhere, tgl)
+	} else {
+		strWhere = fmt.Sprintf(`%s AND reportrekap.tgl_dibukukan >= '%s' AND reportrekap.tgl_dibukukan <= '%s'`, strWhere, tgl, tglakhir)
+	}
 
 	// main query
 	sqlQuerySum := i.db.Table("reportrekap").
