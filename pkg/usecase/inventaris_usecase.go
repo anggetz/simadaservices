@@ -431,7 +431,6 @@ func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *g
 func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, export bool, g *gin.Context) ([]string, map[string]bool) {
 	depJoin := map[string]bool{}
 	whereClause := []string{}
-
 	// get the filter
 	if q.Draft != "" {
 		if q.Draft == "1" {
@@ -660,6 +659,8 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, ex
 	}
 
 	if q.StatusVerifikasi != "" {
+
+		fmt.Println("check status verif", q.StatusVerifikasi)
 		if q.StatusVerifikasi == "terverifikasi" {
 			whereClause = append(whereClause, "verifikator_flag IS TRUE")
 		} else if q.StatusVerifikasi == "proses verifikasi kuasa pengguna" {
@@ -1084,6 +1085,8 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi")
 
 	whereClause = append(whereClause, whereClauseAccess...)
+
+	fmt.Println(whereClause)
 
 	sqlTx := sql.
 		Select([]string{
