@@ -860,9 +860,13 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Joins("join m_organisasi ON m_organisasi.id = inventaris.pid_organisasi")
 
 	// get count filtered
-	sqlCount := sql.
-		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClauseAccess, " AND "))
+	sqlCount := i.db.
+		Table("(?) as inventaris",
+			sql.Model(new(models.Inventaris)).
+				Where(strings.Join(whereClauseAccess, " AND ")).
+				Select("1").
+				Limit(1000000),
+		)
 
 	var countData struct {
 		Total int64
@@ -872,64 +876,28 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		Total int64
 	}
 
-	redisCountAllKey := "inventaris-count-all"
+	sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
 
-	if organisasiLoggedIn.Level > 0 {
-		redisCountAllKey = redisCountAllKey + "-" + strconv.Itoa(organisasiLoggedIn.ID)
-	}
-
-	err := i.redisCache.Get(context.TODO(), redisCountAllKey, &countData.Total)
-	if err != nil && err != cache.ErrCacheMiss {
-
-		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
-	}
-
-	if err == cache.ErrCacheMiss {
-		sqlTxCount := sqlCount.Select("COUNT(1) as total").Scan(&countData)
-
-		if sqlTxCount.Error != nil {
-			return nil, 0, 0, sqlCount.Error
-		}
-
-		err = i.redisCache.Set(&cache.Item{
-			Ctx:   context.TODO(),
-			Key:   redisCountAllKey,
-			Value: countData.Total,
-			TTL:   time.Minute * 10,
-		})
+	if sqlTxCount.Error != nil {
+		return nil, 0, 0, sqlCount.Error
 	}
 
 	whereClause = append(whereClause, whereClauseAccess...)
 
 	// get count filtered
-	sqlCountFiltered := sql.
-		Model(new(models.Inventaris)).
-		Where(strings.Join(whereClause, " AND "))
+	sqlCountFiltered := i.db.
+		Table("(?) as inventaris",
+			sql.Model(new(models.Inventaris)).
+				Where(strings.Join(whereClause, " AND ")).
+				Select("1").
+				Limit(1000000),
+		)
 
 	// get from cache
-	err = i.redisCache.Get(context.TODO(), "inventaris-"+strings.Join(whereClause, " AND "), &countDataFiltered.Total)
-	if err != nil && err != cache.ErrCacheMiss {
-		return nil, 0, 0, fmt.Errorf("error when get redis cache: %v", err.Error())
-	}
+	sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
 
-	if err == cache.ErrCacheMiss || countDataFiltered.Total == 0 {
-		sqlTxCountFiltered := sqlCountFiltered.Select("COUNT(1) as total").Scan(&countDataFiltered)
-
-		if sqlTxCountFiltered.Error != nil {
-			return nil, 0, 0, sqlCountFiltered.Error
-		}
-
-		err = i.redisCache.Set(&cache.Item{
-			Ctx:   context.TODO(),
-			Key:   strings.Join(whereClause, " AND "),
-			Value: countDataFiltered.Total,
-			TTL:   time.Minute * 10,
-		})
-
-	}
-
-	if err != nil {
-		return nil, 0, 0, fmt.Errorf("error when set redis cache: %v", err.Error())
+	if sqlTxCountFiltered.Error != nil {
+		return nil, 0, 0, sqlCountFiltered.Error
 	}
 
 	sqlTx := sql.
