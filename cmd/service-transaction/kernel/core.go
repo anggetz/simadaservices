@@ -1,7 +1,7 @@
 package kernel
 
 import (
-	"simadaservices/pkg/models"
+	"libcore/models"
 
 	"github.com/adjust/rmq/v5"
 	"github.com/elastic/go-elasticsearch/v8"

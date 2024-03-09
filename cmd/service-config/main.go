@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"simadaservices/cmd/service-config/kernel"
+	"service-config/kernel"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"

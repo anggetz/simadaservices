@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"libcore/queue"
+	"libcore/tools"
 	"log"
 	"os"
 	"os/signal"
-	"simadaservices/cmd/service-worker/kernel"
-	"simadaservices/pkg/queue"
-	"simadaservices/pkg/tools"
+	"service-worker/kernel"
 	"syscall"
 	"time"
 

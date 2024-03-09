@@ -1,9 +1,9 @@
 package rest
 
 import (
-	"simadaservices/cmd/service-transaction/kernel"
-	"simadaservices/pkg/tools"
-	"simadaservices/pkg/usecase"
+	"libcore/tools"
+	"libcore/usecase"
+	"service-transaction/kernel"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"

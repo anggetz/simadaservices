@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"libcore/pipelines"
+	"libcore/tools"
 	"log"
 	"os"
-	"simadaservices/cmd/service-pipeline/kernel"
-	"simadaservices/pkg/pipelines"
-	"simadaservices/pkg/tools"
+	"service-pipeline/kernel"
 	"time"
 
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"

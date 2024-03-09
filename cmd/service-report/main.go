@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"libcore/middlewares"
+	"libcore/tools"
 	"log"
 	"os"
-	"simadaservices/cmd/service-report/kernel"
-	"simadaservices/cmd/service-report/rest"
-	"simadaservices/pkg/middlewares"
-	"simadaservices/pkg/tools"
+	"service-report/kernel"
+	"service-report/rest"
 	"time"
 
 	"github.com/adjust/rmq/v5"

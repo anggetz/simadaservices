@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"libcore/models"
+	"libcore/tools"
+	"libcore/usecase"
 	"log"
 	"os"
-	"simadaservices/cmd/service-auth/kernel"
-	"simadaservices/pkg/models"
-	"simadaservices/pkg/tools"
-	"simadaservices/pkg/usecase"
+	"service-auth/kernel"
 	"time"
 
 	"github.com/gin-gonic/gin"

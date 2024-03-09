@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"libcore/middlewares"
+	"libcore/tools"
 	"log"
 	"os"
-	"simadaservices/cmd/service-transaction/kernel"
-	"simadaservices/cmd/service-transaction/rest"
-	"simadaservices/pkg/middlewares"
-	"simadaservices/pkg/tools"
+	"service-transaction/kernel"
+	"service-transaction/rest"
 	"time"
 
 	"github.com/adjust/rmq/v5"
@@ -101,7 +101,7 @@ func setUpRedis() {
 func main() {
 	// Create or open a log file for writing
 	currentTime := time.Now().Format("2006-01-02")
-	logFile, err := os.OpenFile("storage/logs/"+currentTime+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile("../storage/logs/"+currentTime+".log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
 		log.Fatal("Error opening log file:", err)
 	}

@@ -1,8 +1,8 @@
 package rest
 
 import (
-	"simadaservices/cmd/service-report/rest"
-	"simadaservices/pkg/usecase"
+	"libcore/usecase"
+	"service-report/rest"
 
 	"github.com/adjust/rmq/v5"
 	"gorm.io/gorm"
