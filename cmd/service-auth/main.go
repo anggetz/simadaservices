@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"libcore/models"
 	"libcore/tools"
-	"libcore/usecase"
 	"log"
 	"os"
 	"service-auth/kernel"
+	"service-auth/usecase"
 	"time"
 
 	"github.com/gin-gonic/gin"

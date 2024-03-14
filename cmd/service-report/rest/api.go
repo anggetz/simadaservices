@@ -6,10 +6,10 @@ import (
 	"io"
 	"libcore/queue"
 	"libcore/tools"
-	usecase "libcore/usecase/report"
 	"log"
 	"os"
 	"service-report/kernel"
+	usecase "service-report/usecase/report"
 	"strconv"
 
 	"github.com/adjust/rmq/v5"

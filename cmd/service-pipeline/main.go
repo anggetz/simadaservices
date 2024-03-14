@@ -3,11 +3,11 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"libcore/pipelines"
 	"libcore/tools"
 	"log"
 	"os"
 	"service-pipeline/kernel"
+	"service-pipeline/pipelines"
 	"time"
 
 	elasticsearch "github.com/elastic/go-elasticsearch/v8"

@@ -3,8 +3,8 @@ package rest
 import (
 	"fmt"
 	"libcore/tools"
-	"libcore/usecase"
 	"service-transaction/kernel"
+	"service-transaction/usecase"
 	"strconv"
 
 	"github.com/dgrijalva/jwt-go"
