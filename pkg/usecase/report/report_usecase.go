@@ -8,9 +8,22 @@ import (
 	"path/filepath"
 	"simadaservices/pkg/models"
 	"strconv"
+	"strings"
+	"time"
 
+	"github.com/dgrijalva/jwt-go"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+const (
+	ATL_EXCEL_FILE_FOLDER          = "bmdatl"
+	TANAH_EXCEL_FILE_FOLDER        = "bmdtanah"
+	REKAPITULASI_EXCEL_FILE_FOLDER = "rekapitulasi"
+	MUTASIBMD_EXCEL_FILE_FOLDER    = "mutasibmd"
+
+	FORMAT_FILE_TIME = "02-01-2006 15:04:05"
 )
 
 type reportUseCase struct {
@@ -30,19 +43,23 @@ type OpdName struct {
 }
 
 type QueryParams struct {
-	Action                 string `form:"action"`
-	F_Bulan                string `form:"f_bulan"`
-	F_Jenis                string `form:"f_jenis"`
-	F_Periode              string `form:"f_periode"`
-	F_Tahun                string `form:"f_tahun"`
-	Firstload              string `form:"firstload"`
-	F_Penggunafilter       string `form:"f_penggunafilter"`
-	F_Kuasapengguna_Filter string `form:"f_kuasapengguna_filter"`
-	F_Subkuasa_Filter      string `form:"f_subkuasa_filter"`
-	Penggunafilter         string `form:"penggunafilter"`
-	Kuasapengguna_Filter   string `form:"kuasapengguna_filter"`
-	Subkuasa_Filter        string `form:"subkuasa_filter"`
-	Draw                   string `form:"draw"`
+	Action                    string `form:"action"`
+	F_Bulan                   string `form:"f_bulan"`
+	F_Jenis                   string `form:"f_jenis"`
+	F_Periode                 string `form:"f_periode"`
+	F_Tahun                   string `form:"f_tahun"`
+	Firstload                 string `form:"firstload"`
+	F_Penggunafilter          string `form:"f_penggunafilter"`
+	F_Kuasapengguna_Filter    string `form:"f_kuasapengguna_filter"`
+	F_Subkuasa_Filter         string `form:"f_subkuasa_filter"`
+	Penggunafilter            string `form:"penggunafilter"`
+	Kuasapengguna_Filter      string `form:"kuasapengguna_filter"`
+	Subkuasa_Filter           string `form:"subkuasa_filter"`
+	JenisPeriode              string `form:"f_jenisperiode"`
+	F_Jenisbarang_Filter      string `form:"f_jenisbarang_filter"`
+	F_Kodeobjek_Filter        string `form:"f_kodeobjek_filter"`
+	F_Koderincianobjek_Filter string `form:"f_koderincianobjek_filter"`
+	Draw                      string `form:"draw"`
 }
 
 func (i *reportUseCase) GetOpdName(c string) OpdName {
@@ -117,23 +134,39 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 	fileList := []models.FileStruct{}
 
 	reportType := g.Query("type")
-	folderPath := os.Getenv("FOLDER_REPORT") + "/" + reportType
-	if _, err := os.Stat(folderPath); os.IsNotExist(err) {
-		return nil, err
-	}
-	files, err := FilePathWalkDir(folderPath)
-	if err != nil {
+	log.Println(reportType)
+	arr := strings.Split(reportType, "-")
+	folderPath := os.Getenv("FOLDER_REPORT") + "/" + arr[2]
+
+	task := []models.TaskQueue{}
+	if err := i.db.Find(&task, "task_name = ?", reportType).Error; err != nil {
 		return nil, err
 	}
 
-	for _, file := range files {
-		fileInfo, _ := os.Stat(file)
-		fileList = append(fileList, models.FileStruct{
-			FilePath:  folderPath,
-			FileName:  fileInfo.Name(),
-			FileSize:  math.Round(float64(fileInfo.Size())/(1024*1024)*100) / 100,
-			CreatedAt: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
-		})
+	for _, v := range task {
+		fileInfo, err := os.Stat(v.CallbackLink + ".xlsx")
+		if err == nil {
+			if !strings.HasPrefix(fileInfo.Name(), ".") {
+				fileList = append(fileList, models.FileStruct{
+					FilePath:  folderPath,
+					FileName:  fileInfo.Name(),
+					FileSize:  math.Round(float64(fileInfo.Size())/(1024*1024)*100) / 100,
+					CreatedAt: fileInfo.ModTime().Format("2006-01-02 15:04:05"),
+					Status:    v.Status,
+				})
+			}
+		} else {
+			filename := strings.Split(v.CallbackLink, "/")[len(strings.Split(v.CallbackLink, "/"))-1]
+			if v.Status == "pending" {
+				fileList = append(fileList, models.FileStruct{
+					FilePath:  folderPath,
+					FileName:  filename,
+					FileSize:  0.0,
+					CreatedAt: "",
+					Status:    v.Status,
+				})
+			}
+		}
 	}
 
 	return fileList, nil
@@ -173,4 +206,72 @@ func (i *reportUseCase) GetTotalOpd(penggunafilter string) ([]models.Organisasi,
 	}
 
 	return opd, totalOpd, nil
+}
+
+func (i *reportUseCase) SetRegisterQueue(g *gin.Context, reportType string) (*models.TaskQueue, error) {
+
+	t, _ := g.Get("token_info")
+	id := t.(jwt.MapClaims)["id"].(float64)
+	folderPath := os.Getenv("FOLDER_REPORT")
+
+	// set filename
+	pidopd := ""
+	pidopd_cabang := ""
+	pidupt := ""
+
+	if g.Query("f_penggunafilter") != "" {
+		pidopd = g.Query("f_penggunafilter")
+	} else {
+		pidopd = g.Query("penggunafilter")
+	}
+	if g.Query("f_kuasapengguna_filter") != "" {
+		pidopd_cabang = g.Query("f_kuasapengguna_filter")
+	} else {
+		pidopd_cabang = g.Query("kuasapengguna_filter")
+	}
+	if g.Query("f_subkuasa_filter") != "" {
+		pidupt = g.Query("f_subkuasa_filter")
+	} else {
+		pidupt = g.Query("subkuasa_filter")
+	}
+
+	opdName := OpdName{}
+	opd := models.Organisasi{}
+	opdcabang := models.Organisasi{}
+	opdsubcabang := models.Organisasi{}
+
+	if pidopd != "" {
+		i.db.First(&opd, pidopd)
+		opdName.Pengguna = opd.Nama
+	}
+
+	if pidopd_cabang != "" {
+		i.db.First(&opdcabang, pidopd_cabang)
+		opdName.KuasaPengguna = opdcabang.Nama
+	}
+
+	if pidupt != "" {
+		i.db.First(&opdsubcabang, pidupt)
+		opdName.SubKuasaPengguna = opdsubcabang.Nama
+	}
+
+	username := t.(jwt.MapClaims)["username"].(string)
+	fileName := opdName.Pengguna + ":" + opdName.KuasaPengguna + ":" + opdName.SubKuasaPengguna + "-" + username
+
+	tq := models.TaskQueue{
+		TaskUUID:     uuid.NewString(),
+		TaskName:     "worker-export-" + reportType,
+		TaskType:     "export_report",
+		Status:       "pending",
+		CreatedBy:    int(id),
+		CallbackLink: folderPath + "/" + reportType + "/" + fileName,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := i.db.Create(&tq).Error; err != nil {
+		return nil, err
+	}
+
+	return &tq, nil
 }

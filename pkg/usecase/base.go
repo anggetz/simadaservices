@@ -2,6 +2,7 @@ package usecase
 
 import (
 	"fmt"
+	"log"
 	"simadaservices/pkg/models"
 	"strings"
 
@@ -24,10 +25,10 @@ func getLoggedInOrganisasi(tokenInfo jwt.MapClaims, dbgorm *gorm.DB) (*models.Or
 
 func buildInventarisAktifWhereClauseString() []string {
 	whereClauseAccess := []string{
-		fmt.Sprintf("inventaris.posting_flag IS TRUE"),
-		fmt.Sprintf("inventaris.deleted_at IS NULL"),
-		fmt.Sprintf("inventaris.verifikator_flag IS TRUE"),
-		fmt.Sprintf("inventaris.draft IS NULL"),
+		"inventaris.posting_flag IS TRUE",
+		"inventaris.deleted_at IS NULL",
+		"inventaris.verifikator_flag IS TRUE",
+		"inventaris.draft IS NULL",
 	}
 
 	return whereClauseAccess
@@ -94,4 +95,37 @@ func buildInventarisWhereClauseString(sql *gorm.DB, dbgorm *gorm.DB, organisasiL
 
 	}
 	return sql, whereClauseAccess
+}
+
+func CreateNotif(db *gorm.DB, sender int, receivers []int, title string, body string, link_to string) error {
+	log.Println("create notif for ", sender, receivers, title, body, link_to)
+
+	db.Transaction(func(tx *gorm.DB) error {
+		notif := models.Notification{
+			CreatedBy: sender,
+			Body:      body,
+			Title:     title,
+			LinkTo:    link_to,
+		}
+		if err := tx.Create(&notif).Error; err != nil {
+			return err
+		}
+
+		for _, val := range receivers {
+			notifReceiver := models.NotificationReceiver{
+				NotificationID: notif.ID,
+				ReceiverID:     val,
+				Status:         false,
+			}
+
+			if err := tx.Create(&notifReceiver).Error; err != nil {
+				return err
+			}
+		}
+
+		log.Println("success create notif")
+		return nil
+	})
+
+	return nil
 }

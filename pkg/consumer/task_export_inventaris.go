@@ -7,7 +7,8 @@ import (
 	"os"
 	"simadaservices/cmd/service-worker/kernel"
 	"simadaservices/pkg/models"
-	usecase "simadaservices/pkg/usecase/report"
+	usecase "simadaservices/pkg/usecase"
+	usecase2 "simadaservices/pkg/usecase/report"
 	"strconv"
 	"strings"
 
@@ -18,74 +19,61 @@ import (
 	"gorm.io/gorm"
 )
 
-type TaskExportRekapitulasi struct {
+type TaskExportInventaris struct {
 	rmq.Consumer
-	Payload TaskExportRekapitulasiPayload
+	Payload TaskExportInventarisPayload
 	DB      *gorm.DB
 	Redis   *cache.Cache
 }
 
-type TaskExportRekapitulasiPayload struct {
+type TaskExportInventarisPayload struct {
 	Headers []string
-	Data    []byte
+	Data    []interface{}
 }
 
 const (
-	REKAPITULASI_EXCEL_FILE_FOLDER = "rekapitulasi"
-	REKAPITULASI_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
+	INVEN_EXCEL_FILE_FOLDER = "inventaris"
+	INVEN_FORMAT_FILE_TIME  = "02-01-2006 15:04:05"
 )
 
-type QueryParamsRekapitulasi struct {
-	Action                 string `json:"action"`
-	F_Bulan                string `json:"f_bulan"`
-	F_Jenis                string `json:"f_jenis"`
-	F_Periode              string `json:"f_periode"`
-	F_Tahun                string `json:"f_tahun"`
-	Firstload              string `json:"firstload"`
-	F_Penggunafilter       string `json:"f_penggunafilter"`
-	F_Kuasapengguna_Filter string `json:"f_kuasapengguna_filter"`
-	F_Subkuasa_Filter      string `json:"f_subkuasa_filter"`
-	Penggunafilter         string `json:"penggunafilter"`
-	Kuasapengguna_Filter   string `json:"kuasapengguna_filter"`
-	Subkuasa_Filter        string `json:"subkuasa_filter"`
-	Draw                   string `json:"draw"`
-	F_Jenisrekap           string `json:"f_jenisrekap"`
-	F_Jenisperiode         string `json:"f_jenisperiode"`
-	QueueId                int    `json:"queue_id"`
-}
-
-func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
+func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 	var err error
-
-	fmt.Println("performing task report rekapitulasi")
+	// insert data
 
 	// get params
-	var params QueryParamsRekapitulasi
+	var params usecase.QueryParamInventaris
 	err = json.Unmarshal([]byte(d.Payload()), &params)
 	if err != nil {
-		log.Println("Error unmarshalling JSON:", err)
+		log.Println("Error unmarshalling JSON:", err.Error())
 		return
 	}
 
-	opdname := usecase.OpdName{}
-	opdname = usecase.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetOpdName(d.Payload())
+	opdname := usecase2.OpdName{}
+	opdname = usecase2.ReportUseCase(kernel.Kernel.Config.DB.Connection).GetOpdName(d.Payload())
 
-	timestr := t.DB.NowFunc().Local().Format(REKAPITULASI_FORMAT_FILE_TIME)
 	folderPath := os.Getenv("FOLDER_REPORT")
-	folderReport := REKAPITULASI_EXCEL_FILE_FOLDER
-	fileName := ""
+	folderReport := INVEN_EXCEL_FILE_FOLDER
+	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
+	timestr := t.DB.NowFunc().Format(INVEN_FORMAT_FILE_TIME)
+	// fileName := opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + "-" + params.TokenUsername + "_" + timestr
+
+	filenames := []string{}
+
 	if opdname.Pengguna != "" {
-		fileName = fileName + strings.ReplaceAll(opdname.Pengguna, " ", "_")
-	} else {
-		fileName = "Rekapitulasi"
+		filenames = append(filenames, strings.ReplaceAll(opdname.Pengguna, " ", "_"))
 	}
+
 	if opdname.KuasaPengguna != "" {
-		fileName = fileName + "|" + strings.ReplaceAll(opdname.KuasaPengguna, " ", "_")
+		filenames = append(filenames, strings.ReplaceAll(opdname.KuasaPengguna, " ", "_"))
 	}
-	if opdname.SubKuasaPengguna != "" {
-		fileName = fileName + "|" + strings.ReplaceAll(opdname.SubKuasaPengguna, " ", "_")
+
+	if params.TokenUsername != "" {
+		filenames = append(filenames, strings.ReplaceAll(params.TokenUsername, " ", "_"))
 	}
-	fileName = fileName + "_" + timestr
+
+	filenames = append(filenames, strings.ReplaceAll(timestr, ":", "_"))
+
+	fileName := strings.Join(filenames, "-")
 
 	defer func(errors error) {
 		if errors != nil {
@@ -97,7 +85,7 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 			t.DB.First(&tq, "id = ?", params.QueueId)
 			tq.Status = "success"
 			if tq.TaskName == "" {
-				tq.TaskName = "worker-export-" + REKAPITULASI_EXCEL_FILE_FOLDER
+				tq.TaskName = "worker-export-" + INVEN_EXCEL_FILE_FOLDER
 			}
 			if tq.TaskType == "" {
 				tq.TaskType = "export_report"
@@ -113,27 +101,36 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 		}
 	}(err)
 
+	fmt.Println("performing task report inventaris", params.Draft)
+
 	startTime := t.DB.NowFunc().Local()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
 	// get data
-	report, _, _, _, _, _ := usecase.NewReportRekapitulasiUseCase(kernel.Kernel.Config.DB.Connection, kernel.Kernel.Config.REDIS.RedisCache).Export(0, 0, params.F_Periode, params.F_Penggunafilter,
-		params.Penggunafilter, params.F_Kuasapengguna_Filter, params.Kuasapengguna_Filter, params.F_Subkuasa_Filter, params.Subkuasa_Filter,
-		params.F_Tahun, params.F_Bulan, params.F_Jenis, params.Action, params.Firstload, params.Draw, params.F_Jenisrekap, params.F_Jenisperiode)
-	log.Println(" -->> RES DATA : ", t.DB.NowFunc().Local().String())
+	report, err := usecase.NewInventarisUseCase().
+		SetDB(kernel.Kernel.Config.DB.Connection).
+		SetRedisCache(kernel.Kernel.Config.REDIS.RedisCache).
+		GetExportInventaris(params)
 
+	if err != nil {
+		log.Println("Error get data: ", err.Error())
+		return
+	}
+
+	log.Println(" -->> RES DATA : ", t.DB.NowFunc().Local().String())
 	log.Println(" -->> CREATE FILE : ", t.DB.NowFunc().Local().String())
+
 	f := excelize.NewFile()
 	defer func() {
 		if err := f.Close(); err != nil {
-			log.Println(err)
+			log.Println("failed to close file", err.Error())
 		}
 	}()
 	// Set the sheet name
 	sheetName := "Sheet1"
 
 	// Set header data
-	headers := []string{"No", "Kode Barang", "Nama Barang", "Jumlah", "Nilai Perolehan (Rp)", "Nilai Atribusi (Rp)", "Nilai Perolehan Setelah Atribusi (Rp)",
-		"Akumulasi Penyusutan (Rp)", "Nilai Buku (Rp)"}
+	headers := []string{"No", "ID Publish", "Kode Barang", "Nomor Register", "Nama Barang", "Cara Perolehan",
+		"Tahun Perolehan", "Kondisi", "Pengguna Barang", "Harga Satuan", "Status Verifikasi"}
 
 	// Create a bold style
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -157,8 +154,6 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	totalRows := 1
 	newno := ""
 	for _, drow := range report {
-		// fmt.Println("<<- INSERT DATA NO - ", no)
-
 		// if sheet not enough
 		if totalRows > 1048570 {
 			noSheet++
@@ -179,14 +174,16 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 
 		newno = strconv.Itoa(totalRows + 1)
 		f.SetCellValue(sheetName, "A"+newno, no)
-		f.SetCellValue(sheetName, "B"+newno, drow.KodeBarang)
-		f.SetCellValue(sheetName, "C"+newno, drow.NamaBarang)
-		f.SetCellValue(sheetName, "D"+newno, drow.Jumlah)
-		f.SetCellValue(sheetName, "E"+newno, drow.NilaiPerolehan)
-		f.SetCellValue(sheetName, "F"+newno, drow.NilaiAtribusi)
-		f.SetCellValue(sheetName, "G"+newno, drow.NilaiPerolehanSetelahAtribusi)
-		f.SetCellValue(sheetName, "H"+newno, drow.AkumulasiPenyusutan)
-		f.SetCellValue(sheetName, "I"+newno, drow.NilaiBuku)
+		f.SetCellValue(sheetName, "B"+newno, drow.IdPublish)
+		f.SetCellValue(sheetName, "C"+newno, drow.KodeBarang)
+		f.SetCellValue(sheetName, "D"+newno, drow.Noreg)
+		f.SetCellValue(sheetName, "E"+newno, drow.NamaRekAset)
+		f.SetCellValue(sheetName, "F"+newno, drow.Perolehan)
+		f.SetCellValue(sheetName, "G"+newno, drow.TahunPerolehan)
+		f.SetCellValue(sheetName, "H"+newno, drow.Kondisi)
+		f.SetCellValue(sheetName, "I"+newno, drow.PenggunaBarang)
+		f.SetCellValue(sheetName, "J"+newno, drow.HargaSatuan)
+		f.SetCellValue(sheetName, "K"+newno, drow.StatusVerifikasi)
 
 		no++
 		totalRows++
@@ -194,7 +191,7 @@ func (t *TaskExportRekapitulasi) Consume(d rmq.Delivery) {
 	log.Println(" -->> END INSERT DATA : ", t.DB.NowFunc().Local().String())
 
 	log.Println(" -->> START SAVE DATA : ", t.DB.NowFunc().Local().String())
-	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
+	// fileName := " Export Inventaris " + "-" + strconv.Itoa(params.QueueId) + "-" + timestr
 	if err := f.SaveAs(fmt.Sprintf("%s/%s/%s.xlsx", folderPath, folderReport, fileName)); err != nil {
 		log.Println("ERROR", err.Error())
 		err = d.Reject()

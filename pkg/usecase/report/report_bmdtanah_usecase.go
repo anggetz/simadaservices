@@ -13,19 +13,19 @@ import (
 	"gorm.io/gorm"
 )
 
-type reportATLUseCase struct {
+type reportTanahUseCase struct {
 	db         *gorm.DB
 	redisCache *cache.Cache
 }
 
-func NewReportATLUseCase(db *gorm.DB, redisCache *cache.Cache) *reportATLUseCase {
-	return &reportATLUseCase{
+func NewReportTanahUseCase(db *gorm.DB, redisCache *cache.Cache) *reportTanahUseCase {
+	return &reportTanahUseCase{
 		db:         db,
 		redisCache: redisCache,
 	}
 }
 
-func (i *reportATLUseCase) Get(start int, limit int, jenis string, g *gin.Context) ([]models.ReportBMDATL, int64, int64, int64, interface{}, error) {
+func (i *reportTanahUseCase) Get(start int, limit int, jenis string, g *gin.Context) ([]models.ReportBMDTanah, int64, int64, int64, interface{}, error) {
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
@@ -96,9 +96,9 @@ func (i *reportATLUseCase) Get(start int, limit int, jenis string, g *gin.Contex
 	// return i.GetData(start, limit, tglawal, tglakhir, pidopd, pidopd_cabang, pidupt, tahun, bulan, draw, jenis)
 }
 
-// func (i *reportATLUseCase) GetData(start int, limit int, tglawal string, tglakhir string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenis string) ([]models.ReportBMDATL, int64, int64, int64, interface{}, error) {
-func (i *reportATLUseCase) GetData(start int, limit int, tgl string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenis string, jenisperiode string, tglakhir string) ([]models.ReportBMDATL, int64, int64, int64, interface{}, error) {
-	report := []models.ReportBMDATL{}
+// func (i *reportTanahUseCase) GetData(start int, limit int, tglawal string, tglakhir string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenis string) ([]models.ReportBMDTanah, int64, int64, int64, interface{}, error) {
+func (i *reportTanahUseCase) GetData(start int, limit int, tgl string, pidopd string, pidopd_cabang string, pidupt string, tahun string, bulan string, draw string, jenis string, jenisperiode string, tglakhir string) ([]models.ReportBMDTanah, int64, int64, int64, interface{}, error) {
+	report := []models.ReportBMDTanah{}
 
 	tahun_sk, _ := strconv.Atoi(tahun)
 	tahun_sb, _ := strconv.Atoi(tahun)
@@ -244,7 +244,7 @@ func (i *reportATLUseCase) GetData(start int, limit int, tgl string, pidopd stri
 	return report, countData.Total, countDataFiltered, ndraw, summary_perpage, nil
 }
 
-func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*models.SummaryPage, error) {
+func (i *reportTanahUseCase) GetTotal(start int, limit int, g *gin.Context) (*models.SummaryPage, error) {
 	tgl := ""
 	pidopd := ""
 	pidopd_cabang := ""
@@ -378,7 +378,7 @@ func (i *reportATLUseCase) GetTotal(start int, limit int, g *gin.Context) (*mode
 	return &summary_page, nil
 }
 
-func (i *reportATLUseCase) Export(start int, limit int, f_periode string, f_penggunafilter string, penggunafilter string, f_kuasapengguna_filter string, kuasapengguna_filter string, f_subkuasa_filter string, subkuasa_filter string, f_tahun string, f_bulan string, f_jenis string, action string, firstload string, draw string, jenisperiode string) ([]models.ReportBMDATL, int64, int64, int64, interface{}, error) {
+func (i *reportTanahUseCase) Export(start int, limit int, f_periode string, f_penggunafilter string, penggunafilter string, f_kuasapengguna_filter string, kuasapengguna_filter string, f_subkuasa_filter string, subkuasa_filter string, f_tahun string, f_bulan string, f_jenis string, action string, firstload string, draw string, jenisperiode string) ([]models.ReportBMDTanah, int64, int64, int64, interface{}, error) {
 
 	tgl := ""
 	pidopd := ""

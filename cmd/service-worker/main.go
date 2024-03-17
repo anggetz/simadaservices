@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"simadaservices/cmd/service-worker/kernel"
-	"simadaservices/cmd/service-worker/rest"
 	"simadaservices/pkg/queue"
 	"simadaservices/pkg/tools"
 	"syscall"
@@ -148,15 +147,20 @@ func main() {
 	defer db.Close()
 	connectionRedis := *kernel.Kernel.Config.REDIS.Connection
 
-	new(queue.QueueImportInventaris).Register(connectionRedis)
+	new(queue.QueueExportInventaris).Register(connectionRedis)
 	new(queue.QueueExportBMDATL).Register(connectionRedis)
 	new(queue.QueueExportRekapitulasi).Register(connectionRedis)
+	new(queue.QueueExportMutasiBMD).Register(connectionRedis)
 
 	// set task yang akan dijalankan scheduler
 	scheduler.AddFunc("00 21 * * *", func() {
-		log.Println(">>> service worker : export bmd atl scheduler")
-		rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
+		// log.Println(">>> service worker : export bmd atl scheduler")
+		// rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
 	}) // SETIAP HARI PUKUL 9 malam setiap hari
+	scheduler.AddFunc("01 0 * * *", func() {
+		// log.Println(">>> service worker : reminder penggunaan sementara")
+		// rest.NewApi().GetReminderPenggunaanSementara(kernel.Kernel.Config.DB.Connection, connectionRedis)
+	}) // SETIAP HARI PUKUL 00 lebih 1 menit malam setiap hari
 	go scheduler.Start()
 
 	fmt.Println("service worker already running")
