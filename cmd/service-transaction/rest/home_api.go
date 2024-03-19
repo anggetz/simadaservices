@@ -24,8 +24,9 @@ func NewHomeApi() HomeApi {
 func (h *homeApiImpl) GetTotalAset(g *gin.Context) {
 
 	t, _ := g.Get("token_info")
+	kode_jenis := g.Query("kode_jenis")
 
-	totalAset, err := usecase.NewHomeUseCase(kernel.Kernel.Config.DB.Connection).GetTotalAset(t.(jwt.MapClaims))
+	totalAset, err := usecase.NewHomeUseCase(kernel.Kernel.Config.DB.Connection).GetTotalAset(t.(jwt.MapClaims), kode_jenis)
 	if err != nil {
 		g.AbortWithError(400, err)
 		return
