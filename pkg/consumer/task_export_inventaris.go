@@ -54,20 +54,26 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 	folderPath := os.Getenv("FOLDER_REPORT")
 	folderReport := INVEN_EXCEL_FILE_FOLDER
 	os.MkdirAll(folderPath+"/"+folderReport, os.ModePerm)
-	timestr := t.DB.NowFunc().Local().Format(INVEN_FORMAT_FILE_TIME)
-	fileName := ""
+	timestr := t.DB.NowFunc().Format(INVEN_FORMAT_FILE_TIME)
+	// fileName := opdname.Pengguna + ":" + opdname.KuasaPengguna + ":" + opdname.SubKuasaPengguna + "-" + params.TokenUsername + "_" + timestr
+
+	filenames := []string{}
+
 	if opdname.Pengguna != "" {
-		fileName = fileName + strings.ReplaceAll(opdname.Pengguna, " ", "_")
-	} else {
-		fileName = "Inventaris"
+		filenames = append(filenames, strings.ReplaceAll(opdname.Pengguna, " ", "_"))
 	}
+
 	if opdname.KuasaPengguna != "" {
-		fileName = fileName + "|" + strings.ReplaceAll(opdname.KuasaPengguna, " ", "_")
+		filenames = append(filenames, strings.ReplaceAll(opdname.KuasaPengguna, " ", "_"))
 	}
-	if opdname.SubKuasaPengguna != "" {
-		fileName = fileName + "|" + strings.ReplaceAll(opdname.SubKuasaPengguna, " ", "_")
+
+	if params.TokenUsername != "" {
+		filenames = append(filenames, strings.ReplaceAll(params.TokenUsername, " ", "_"))
 	}
-	fileName = fileName + "_" + timestr
+
+	filenames = append(filenames, strings.ReplaceAll(timestr, ":", "_"))
+
+	fileName := strings.Join(filenames, "-")
 
 	defer func(errors error) {
 		if errors != nil {
@@ -95,7 +101,7 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		}
 	}(err)
 
-	fmt.Println("performing task report inventaris")
+	fmt.Println("performing task report inventaris", params.Draft)
 
 	startTime := t.DB.NowFunc().Local()
 	log.Println("->> START EXPORT : ", opdname.Pengguna, "|", opdname.KuasaPengguna, "|", opdname.SubKuasaPengguna, " : ", startTime.String())
