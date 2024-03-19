@@ -264,13 +264,14 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 
 type getInvoiceResponse struct {
 	*models.Inventaris
-	NamaRekAset      string `json:"nama_rek_aset"`
-	KelompokKib      string `json:"kelompok_kib"`
-	Jenis            string `json:"jenis"`
-	StatusVerifikasi string `json:"status_verifikasi"`
-	PenggunaBarang   string `json:"pengguna_barang"`
-	Detail           string `json:"detail"`
-	CanDelete        bool   `json:"can_delete"`
+	NamaRekAset       string  `json:"nama_rek_aset"`
+	KelompokKib       string  `json:"kelompok_kib"`
+	Jenis             string  `json:"jenis"`
+	StatusVerifikasi  string  `json:"status_verifikasi"`
+	PenggunaBarang    string  `json:"pengguna_barang"`
+	Detail            string  `json:"detail"`
+	CanDelete         bool    `json:"can_delete"`
+	BiayaPemeliharaan float64 `json:"biaya_pemeliharaan"`
 }
 
 func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
@@ -940,6 +941,7 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 			"m_organisasi.nama as pengguna_barang",
 		}).
 		Where(strings.Join(whereClause, " AND ")).
+		Preload("Pemeliharaan").
 		Offset(q.Start).Limit(q.Limit)
 
 	if order != "" {
