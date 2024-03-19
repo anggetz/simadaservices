@@ -139,7 +139,7 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 	folderPath := os.Getenv("FOLDER_REPORT") + "/" + arr[2]
 
 	task := []models.TaskQueue{}
-	if err := i.db.Find(&task, "task_name = ?", reportType).Error; err != nil {
+	if err := i.db.Find(&task, "task_name = ?", reportType).Order("created_at desc").Error; err != nil {
 		return nil, err
 	}
 
