@@ -138,8 +138,10 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 	arr := strings.Split(reportType, "-")
 	folderPath := os.Getenv("FOLDER_REPORT") + "/" + arr[2]
 
+	t, _ := g.Get("token_info")
+
 	task := []models.TaskQueue{}
-	if err := i.db.Find(&task, "task_name = ?", reportType).Error; err != nil {
+	if err := i.db.Find(&task, "task_name = ? and created_by = ?", reportType, t.(jwt.MapClaims)["id"].(float64)).Error; err != nil {
 		return nil, err
 	}
 
