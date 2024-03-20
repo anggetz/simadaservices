@@ -10,7 +10,7 @@ import (
 )
 
 type HomeUseCase interface {
-	GetTotalAset(jwt.MapClaims) (int64, error)
+	GetTotalAset(jwt.MapClaims, string) (int64, error)
 	GetNilaiAsset(jwt.MapClaims, *gin.Context) (float64, error)
 	GetNilaiAssetGroupByKodeJenis(jwt.MapClaims) ([]getNilaiAssetGroupByKodeJenis, error)
 }
@@ -25,7 +25,7 @@ func NewHomeUseCase(db *gorm.DB) HomeUseCase {
 	}
 }
 
-func (hu *homeUseCaseImpl) GetTotalAset(tokenInfo jwt.MapClaims) (int64, error) {
+func (hu *homeUseCaseImpl) GetTotalAset(tokenInfo jwt.MapClaims, kode_jenis string) (int64, error) {
 
 	sql := hu.db
 
@@ -38,15 +38,21 @@ func (hu *homeUseCaseImpl) GetTotalAset(tokenInfo jwt.MapClaims) (int64, error) 
 		return 0, err
 	}
 
-	whereClauseAccess := []string{}
+	// whereClauseAccess := []string{}
 
-	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
+	sql, whereClauseAccess := buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
 	whereClauseAktifInventaris := buildInventarisAktifWhereClauseString()
 
 	whereClauseAccess = append(whereClauseAccess, whereClauseAktifInventaris...)
 
-	sql.Select("COUNT(inventaris.id) as total").Model(new(models.Inventaris)).Where(strings.Join(whereClauseAccess, " AND ")).Scan(&modelTotal)
+	sql = sql.Select("COUNT(inventaris.id) as total").Model(new(models.Inventaris)).Where(strings.Join(whereClauseAccess, " AND ")).Joins("JOIN m_barang mb ON mb.id = inventaris.pidbarang")
+
+	if kode_jenis != "" {
+		sql = sql.Where("mb.kode_jenis = ?", kode_jenis)
+	}
+
+	sql.Scan(&modelTotal)
 
 	return modelTotal.Total, nil
 
@@ -65,7 +71,7 @@ func (hu *homeUseCaseImpl) GetNilaiAsset(tokenInfo jwt.MapClaims, g *gin.Context
 		return 0, err
 	}
 
-	whereClauseAccess := []string{}
+	// whereClauseAccess := []string{}
 	q := QueryParamInventaris{}
 	t, _ := g.Get("token_info")
 
@@ -92,7 +98,7 @@ func (hu *homeUseCaseImpl) GetNilaiAsset(tokenInfo jwt.MapClaims, g *gin.Context
 	q.TokenOrg = t.(jwt.MapClaims)["org_id"].(float64)
 	q.TokenId = t.(jwt.MapClaims)["id"].(float64)
 
-	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
+	sql, whereClauseAccess := buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
 	whereClauseAktifInventaris := buildInventarisAktifWhereClauseString()
 
@@ -137,7 +143,20 @@ func (hu *homeUseCaseImpl) GetNilaiAsset(tokenInfo jwt.MapClaims, g *gin.Context
 		sql = sql.Joins("join m_barang ON m_barang.id = inventaris.pidbarang")
 	}
 
-	sql.Select("SUM(inventaris.harga_satuan) as total").Model(new(models.Inventaris)).Where(strings.Join(whereClause, " AND ")).Scan(&modelTotal)
+	sql = sql.Select("SUM(inventaris.harga_satuan) + COALESCE(SUM(p.biaya), 0) as total").Model(new(models.Inventaris)).Where(strings.Join(whereClause, " AND ")).
+		Joins("LEFT JOIN pemeliharaan p ON p.pidinventaris = inventaris.id")
+
+	kode_jenis := g.Query("kode_jenis")
+	if kode_jenis != "" {
+		if len(whereClause) > 0 {
+			sql = sql.Where("m_barang.kode_jenis = ?", kode_jenis)
+		} else {
+			sql = sql.Joins("JOIN m_barang mb ON mb.id = inventaris.pidbarang").
+				Where("mb.kode_jenis = ?", kode_jenis)
+		}
+	}
+
+	sql.Scan(&modelTotal)
 
 	return modelTotal.Total, nil
 
@@ -158,16 +177,16 @@ func (hu *homeUseCaseImpl) GetNilaiAssetGroupByKodeJenis(tokenInfo jwt.MapClaims
 	if err != nil {
 		return modelTotal, err
 	}
-	whereClauseAccess := []string{}
+	// whereClauseAccess := []string{}
 
-	sql, whereClauseAccess = buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
+	sql, whereClauseAccess := buildInventarisWhereClauseString(sql, hu.db, organisasiLoggedIn)
 
 	whereClauseAktifInventaris := buildInventarisAktifWhereClauseString()
 
 	whereClauseAccess = append(whereClauseAccess, whereClauseAktifInventaris...)
 
 	sql.
-		Select("SUM(inventaris.harga_satuan) + COALESCE(SUM(p.biaya), 0) as nilai, COUNT(1) as total, barang.kode_jenis as jenis_asset").
+		Select("SUM(inventaris.harga_satuan) + COALESCE(SUM(p.biaya), 0) as nilai, COUNT(distinct inventaris.id) as total, barang.kode_jenis as jenis_asset").
 		Model(new(models.Inventaris)).
 		Joins("LEFT JOIN pemeliharaan p ON p.pidinventaris = inventaris.id").
 		Joins("JOIN m_barang barang ON barang.id = inventaris.pidbarang").

@@ -33,11 +33,19 @@ func main() {
 	kernel.Kernel.Config.SIMADA_SV_PORT_AUTH = os.Getenv("SIMADA_SV_PORT_AUTH")
 	kernel.Kernel.Config.SIMADA_SV_PORT_TRANSACTION = os.Getenv("SIMADA_SV_PORT_TRANSACTION")
 	kernel.Kernel.Config.SIMADA_SV_PORT_REPORT = os.Getenv("SIMADA_SV_PORT_REPORT")
+
 	kernel.Kernel.Config.DB.Database = os.Getenv("SIMADA_DB_PG_DB")
 	kernel.Kernel.Config.DB.Host = os.Getenv("SIMADA_DB_PG_HOST")
 	kernel.Kernel.Config.DB.Port = os.Getenv("SIMADA_DB_PG_PORT")
 	kernel.Kernel.Config.DB.User = os.Getenv("SIMADA_DB_PG_USER")
 	kernel.Kernel.Config.DB.Password = os.Getenv("SIMADA_DB_PG_PASSWORD")
+
+	// kernel.Kernel.Config.DB.Database = os.Getenv("DEV_SIMADA_DB_PG_DB")
+	// kernel.Kernel.Config.DB.Host = os.Getenv("DEV_SIMADA_DB_PG_HOST")
+	// kernel.Kernel.Config.DB.Port = os.Getenv("DEV_SIMADA_DB_PG_PORT")
+	// kernel.Kernel.Config.DB.User = os.Getenv("DEV_SIMADA_DB_PG_USER")
+	// kernel.Kernel.Config.DB.Password = os.Getenv("DEV_SIMADA_DB_PG_PASSWORD")
+
 	kernel.Kernel.Config.DB.TimeZone = os.Getenv("SIMADA_DB_PG_TIMEZONE")
 
 	kernel.Kernel.Config.REDIS.Host = os.Getenv("REDIS_HOST")
