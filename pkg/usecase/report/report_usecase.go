@@ -19,7 +19,9 @@ import (
 
 const (
 	ATL_EXCEL_FILE_FOLDER          = "bmdatl"
+	TANAH_EXCEL_FILE_FOLDER        = "bmdtanah"
 	REKAPITULASI_EXCEL_FILE_FOLDER = "rekapitulasi"
+	MUTASIBMD_EXCEL_FILE_FOLDER    = "mutasibmd"
 
 	FORMAT_FILE_TIME = "02-01-2006 15:04:05"
 )
@@ -41,19 +43,23 @@ type OpdName struct {
 }
 
 type QueryParams struct {
-	Action                 string `form:"action"`
-	F_Bulan                string `form:"f_bulan"`
-	F_Jenis                string `form:"f_jenis"`
-	F_Periode              string `form:"f_periode"`
-	F_Tahun                string `form:"f_tahun"`
-	Firstload              string `form:"firstload"`
-	F_Penggunafilter       string `form:"f_penggunafilter"`
-	F_Kuasapengguna_Filter string `form:"f_kuasapengguna_filter"`
-	F_Subkuasa_Filter      string `form:"f_subkuasa_filter"`
-	Penggunafilter         string `form:"penggunafilter"`
-	Kuasapengguna_Filter   string `form:"kuasapengguna_filter"`
-	Subkuasa_Filter        string `form:"subkuasa_filter"`
-	Draw                   string `form:"draw"`
+	Action                    string `form:"action"`
+	F_Bulan                   string `form:"f_bulan"`
+	F_Jenis                   string `form:"f_jenis"`
+	F_Periode                 string `form:"f_periode"`
+	F_Tahun                   string `form:"f_tahun"`
+	Firstload                 string `form:"firstload"`
+	F_Penggunafilter          string `form:"f_penggunafilter"`
+	F_Kuasapengguna_Filter    string `form:"f_kuasapengguna_filter"`
+	F_Subkuasa_Filter         string `form:"f_subkuasa_filter"`
+	Penggunafilter            string `form:"penggunafilter"`
+	Kuasapengguna_Filter      string `form:"kuasapengguna_filter"`
+	Subkuasa_Filter           string `form:"subkuasa_filter"`
+	JenisPeriode              string `form:"f_jenisperiode"`
+	F_Jenisbarang_Filter      string `form:"f_jenisbarang_filter"`
+	F_Kodeobjek_Filter        string `form:"f_kodeobjek_filter"`
+	F_Koderincianobjek_Filter string `form:"f_koderincianobjek_filter"`
+	Draw                      string `form:"draw"`
 }
 
 func (i *reportUseCase) GetOpdName(c string) OpdName {
@@ -132,8 +138,10 @@ func (i *reportUseCase) GetFileExport(g *gin.Context) ([]models.FileStruct, erro
 	arr := strings.Split(reportType, "-")
 	folderPath := os.Getenv("FOLDER_REPORT") + "/" + arr[2]
 
+	t, _ := g.Get("token_info")
+
 	task := []models.TaskQueue{}
-	if err := i.db.Find(&task, "task_name = ?", reportType).Error; err != nil {
+	if err := i.db.Find(&task, "task_name = ? and created_by = ?", reportType, t.(jwt.MapClaims)["id"].(float64)).Order("created_at desc").Error; err != nil {
 		return nil, err
 	}
 

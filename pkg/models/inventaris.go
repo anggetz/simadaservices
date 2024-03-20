@@ -5,7 +5,7 @@ import (
 )
 
 type Inventaris struct {
-	ID                  int               `json:"id"`
+	ID                  int               `json:"id" gorm:"primaryKey"`
 	Noreg               string            `json:"noreg"`
 	Pidbarang           int               `json:"pidbarang"`
 	Pidopd              int               `json:"pidopd"`
@@ -64,6 +64,7 @@ type Inventaris struct {
 	DetilKonstruksiRel  *DetilKonstruksi  `json:"detil_konstruksi" gorm:"foreignKey:ID;references:pidinventaris"`
 	AlamatKotaRel       *Alamat           `json:"alamat_kota_rel" gorm:"foreignKey:alamat_kota;references:id"`
 	AlamatKecamatanRel  *Alamat           `json:"alamat_kecamatan_rel" gorm:"foreignKey:alamat_kecamatan;references:id"`
+	Pemeliharaan        []Pemeliharaan    `json:"pemeliharaan" gorm:"foreignKey:pidinventaris;references:id"`
 }
 
 func (i *Inventaris) TableName() string {
