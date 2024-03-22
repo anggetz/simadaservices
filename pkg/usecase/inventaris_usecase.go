@@ -22,7 +22,7 @@ import (
 )
 
 type InvoiceUseCase interface {
-	Get(limit, skip int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error)
+	Get(limit, skip int, canDelete bool, g *gin.Context) ([]models.GetInvoiceResponse, int64, int64, error)
 	GetPemeliharaanInventaris(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	GetFromElastic(limit, skip int, g *gin.Context) (interface{}, int64, int64, error)
 	GetInventarisNeedVerificator(limit int, skip int, g *gin.Context) (interface{}, int64, int64, error)
@@ -262,21 +262,9 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 	return &resp, countDataFiltered.Total, countData.Total, txData.Error
 }
 
-type getInvoiceResponse struct {
-	*models.Inventaris
-	NamaRekAset       string  `json:"nama_rek_aset"`
-	KelompokKib       string  `json:"kelompok_kib"`
-	Jenis             string  `json:"jenis"`
-	StatusVerifikasi  string  `json:"status_verifikasi"`
-	PenggunaBarang    string  `json:"pengguna_barang"`
-	Detail            string  `json:"detail"`
-	CanDelete         bool    `json:"can_delete"`
-	BiayaPemeliharaan float64 `json:"biaya_pemeliharaan"`
-}
-
 func (i *invoiceUseCaseImpl) GetInventarisNeedVerificator(limit, start int, g *gin.Context) (interface{}, int64, int64, error) {
 
-	inventaris := []getInvoiceResponse{}
+	inventaris := []models.GetInvoiceResponse{}
 
 	whereClauseAccess := []string{}
 	whereClause := []string{}
@@ -660,8 +648,6 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, ex
 	}
 
 	if q.StatusVerifikasi != "" {
-
-		fmt.Println("check status verif", q.StatusVerifikasi)
 		if q.StatusVerifikasi == "terverifikasi" {
 			whereClause = append(whereClause, "verifikator_flag IS TRUE")
 		} else if q.StatusVerifikasi == "proses verifikasi kuasa pengguna" {
@@ -688,9 +674,9 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, ex
 	return whereClause, depJoin
 }
 
-func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) (interface{}, int64, int64, error) {
+func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Context) ([]models.GetInvoiceResponse, int64, int64, error) {
 
-	inventaris := []getInvoiceResponse{}
+	inventaris := []models.GetInvoiceResponse{}
 	q := QueryParamInventaris{}
 
 	whereClause := []string{}
@@ -934,13 +920,13 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 	}
 
 	sqlTx := sql.
-		Select([]string{
-			"inventaris.*",
-			"m_barang.nama_rek_aset",
-			"m_jenis_barang.kelompok_kib",
-			"m_jenis_barang.nama as jenis",
-			"m_organisasi.nama as pengguna_barang",
-		}).
+		Select(`
+			inventaris.*,
+			m_barang.nama_rek_aset,
+			m_jenis_barang.kelompok_kib,
+			m_jenis_barang.nama as jenis,
+			'test' as status_verifikasi,
+			m_organisasi.nama as pengguna_barang`).
 		Where(strings.Join(whereClause, " AND ")).
 		Preload("Pemeliharaan").
 		Offset(q.Start).Limit(q.Limit)
@@ -953,24 +939,26 @@ func (i *invoiceUseCaseImpl) Get(limit, start int, canDelete bool, g *gin.Contex
 		return nil, 0, 0, err
 	}
 
-	for _, dt := range inventaris {
-		if q.CanDelete {
-			dt.CanDelete = q.CanDelete
-		}
-		if !dt.VerifikatorFlag {
-			if dt.VerifikatorIsRevise {
-				dt.StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
-			} else {
-				if dt.VerifikatorStatus == 0 {
-					dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
-				} else if dt.VerifikatorStatus == 1 {
-					dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
-				} else if dt.VerifikatorStatus == 2 {
-					dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
-				}
+	if len(inventaris) > 0 {
+		for _, dt := range inventaris {
+			if q.CanDelete {
+				dt.CanDelete = q.CanDelete
 			}
-		} else {
-			dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+			// if !dt.VerifikatorFlag {
+			// 	if dt.VerifikatorIsRevise {
+			// 		dt.StatusVerifikasi = "<span class='badge bg-yellow'>Permintaan revisi data</span>"
+			// 	} else {
+			// 		if dt.VerifikatorStatus == 0 {
+			// 			dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Kuasa Pengguna</span>"
+			// 		} else if dt.VerifikatorStatus == 1 {
+			// 			dt.StatusVerifikasi = "<span class='badge bg-blue'>Proses Verifikasi Pengguna Barang</span>"
+			// 		} else if dt.VerifikatorStatus == 2 {
+			// 			dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+			// 		}
+			// 	}
+			// } else {
+			// 	dt.StatusVerifikasi = "<span class='badge bg-green'>Telah terverifikasi</span>"
+			// }
 		}
 	}
 
@@ -989,7 +977,7 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 	// get the filter
 	whereClause, depJoin = i.buildGetInventarisFilter(q, false, g)
 
-	sql := i.db.Model(&[]getInvoiceResponse{})
+	sql := i.db.Model(&[]models.GetInvoiceResponse{})
 
 	if depJoin["detil_tanah"] {
 		sql = sql.Joins("join detil_tanah ON detil_tanah.pidinventaris = inventaris.id")
@@ -1088,8 +1076,6 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 
 	whereClause = append(whereClause, whereClauseAccess...)
 
-	fmt.Println(whereClause)
-
 	sqlTx := sql.
 		Select([]string{
 			"inventaris.*",
@@ -1104,21 +1090,23 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 		return nil, err
 	}
 
-	for _, dt := range inventaris {
-		if !dt.VerifikatorFlag {
-			if dt.VerifikatorIsRevise {
-				dt.StatusVerifikasi = "Permintaan revisi data"
-			} else {
-				if dt.VerifikatorStatus == 0 {
-					dt.StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
-				} else if dt.VerifikatorStatus == 1 {
-					dt.StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
-				} else if dt.VerifikatorStatus == 2 {
-					dt.StatusVerifikasi = "Telah terverifikasi"
+	if len(inventaris) > 0 {
+		for _, dt := range inventaris {
+			if !dt.VerifikatorFlag {
+				if dt.VerifikatorIsRevise {
+					dt.StatusVerifikasi = "Permintaan revisi data"
+				} else {
+					if dt.VerifikatorStatus == 0 {
+						dt.StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
+					} else if dt.VerifikatorStatus == 1 {
+						dt.StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
+					} else if dt.VerifikatorStatus == 2 {
+						dt.StatusVerifikasi = "Telah terverifikasi"
+					}
 				}
+			} else {
+				dt.StatusVerifikasi = "Telah terverifikasi"
 			}
-		} else {
-			dt.StatusVerifikasi = "Telah terverifikasi"
 		}
 	}
 

@@ -86,3 +86,15 @@ type ReportInventaris struct {
 	VerifikatorStatus   int     `json:"verifikator_status"`
 	VerifikatorIsRevise bool    `json:"verifikator_is_revise"`
 }
+
+type GetInvoiceResponse struct {
+	*Inventaris
+	NamaRekAset       string  `json:"nama_rek_aset"`
+	KelompokKib       string  `json:"kelompok_kib"`
+	Jenis             string  `json:"jenis"`
+	StatusVerifikasi  string  `json:"status_verifikasi"`
+	PenggunaBarang    string  `json:"pengguna_barang"`
+	Detail            string  `json:"detail"`
+	CanDelete         bool    `json:"can_delete"`
+	BiayaPemeliharaan float64 `json:"biaya_pemeliharaan"`
+}
