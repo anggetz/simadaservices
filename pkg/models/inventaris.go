@@ -78,6 +78,7 @@ type ReportInventaris struct {
 	NamaRekAset         string  `json:"nama_rek_aset"`
 	Perolehan           string  `json:"perolehan"`
 	TahunPerolehan      string  `json:"tahun_perolehan"`
+	TanggalPerolehan    string  `json:"tanggal_perolehan"`
 	Kondisi             string  `json:"kondisi"`
 	PenggunaBarang      string  `json:"pengguna_barang"`
 	HargaSatuan         float64 `json:"harga_satuan"`

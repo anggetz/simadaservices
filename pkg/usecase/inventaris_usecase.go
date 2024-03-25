@@ -1079,9 +1079,18 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 	sqlTx := sql.
 		Select([]string{
 			"inventaris.*",
+			"to_char(inventaris.tgl_perolehan, 'dd/mm/yyyy') as tanggal_perolehan",
 			"m_barang.nama_rek_aset",
 			"m_jenis_barang.kelompok_kib",
 			"m_jenis_barang.nama as jenis",
+			`case when inventaris.verifikator_flag = false then 
+				case when inventaris.verifikator_is_revise = true then 'Permintaan revisi data' 
+					else 
+						case when inventaris.verifikator_status = 0 then 'Proses Verifikasi Kuasa Pengguna'
+						when inventaris.verifikator_status = 1 then 'Proses Verifikasi Pengguna Barang'
+						when inventaris.verifikator_status = 2 then 'Telah terverifikasi' end
+					end
+			else 'Telah terverifikasi' end as status_verifikasi`,
 			"m_organisasi.nama as pengguna_barang",
 		}).
 		Where(strings.Join(whereClause, " AND "))
@@ -1090,25 +1099,25 @@ func (i *invoiceUseCaseImpl) GetExportInventaris(q QueryParamInventaris) ([]mode
 		return nil, err
 	}
 
-	if len(inventaris) > 0 {
-		for _, dt := range inventaris {
-			if !dt.VerifikatorFlag {
-				if dt.VerifikatorIsRevise {
-					dt.StatusVerifikasi = "Permintaan revisi data"
-				} else {
-					if dt.VerifikatorStatus == 0 {
-						dt.StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
-					} else if dt.VerifikatorStatus == 1 {
-						dt.StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
-					} else if dt.VerifikatorStatus == 2 {
-						dt.StatusVerifikasi = "Telah terverifikasi"
-					}
-				}
-			} else {
-				dt.StatusVerifikasi = "Telah terverifikasi"
-			}
-		}
-	}
+	// if len(inventaris) > 0 {
+	// 	for _, dt := range inventaris {
+	// 		if !dt.VerifikatorFlag {
+	// 			if dt.VerifikatorIsRevise {
+	// 				dt.StatusVerifikasi = "Permintaan revisi data"
+	// 			} else {
+	// 				if dt.VerifikatorStatus == 0 {
+	// 					dt.StatusVerifikasi = "Proses Verifikasi Kuasa Pengguna"
+	// 				} else if dt.VerifikatorStatus == 1 {
+	// 					dt.StatusVerifikasi = "Proses Verifikasi Pengguna Barang"
+	// 				} else if dt.VerifikatorStatus == 2 {
+	// 					dt.StatusVerifikasi = "Telah terverifikasi"
+	// 				}
+	// 			}
+	// 		} else {
+	// 			dt.StatusVerifikasi = "Telah terverifikasi"
+	// 		}
+	// 	}
+	// }
 
 	return inventaris, sqlTx.Error
 }
