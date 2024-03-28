@@ -130,7 +130,7 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 
 	// Set header data
 	headers := []string{"No", "ID Publish", "Kode Barang", "Nomor Register", "Nama Barang", "Cara Perolehan",
-		"Tahun Perolehan", "Kondisi", "Pengguna Barang", "Harga Satuan", "Status Verifikasi"}
+		"Tahun Perolehan", "Tgl Perolehan", "Kondisi", "Pengguna Barang", "Harga Satuan", "Status Verifikasi"}
 
 	// Create a bold style
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -180,10 +180,11 @@ func (t *TaskExportInventaris) Consume(d rmq.Delivery) {
 		f.SetCellValue(sheetName, "E"+newno, drow.NamaRekAset)
 		f.SetCellValue(sheetName, "F"+newno, drow.Perolehan)
 		f.SetCellValue(sheetName, "G"+newno, drow.TahunPerolehan)
-		f.SetCellValue(sheetName, "H"+newno, drow.Kondisi)
-		f.SetCellValue(sheetName, "I"+newno, drow.PenggunaBarang)
-		f.SetCellValue(sheetName, "J"+newno, drow.HargaSatuan)
-		f.SetCellValue(sheetName, "K"+newno, drow.StatusVerifikasi)
+		f.SetCellValue(sheetName, "H"+newno, drow.TanggalPerolehan)
+		f.SetCellValue(sheetName, "I"+newno, drow.Kondisi)
+		f.SetCellValue(sheetName, "J"+newno, drow.PenggunaBarang)
+		f.SetCellValue(sheetName, "K"+newno, drow.HargaSatuan)
+		f.SetCellValue(sheetName, "L"+newno, drow.StatusVerifikasi)
 
 		no++
 		totalRows++
