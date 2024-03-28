@@ -78,6 +78,7 @@ type ReportInventaris struct {
 	NamaRekAset         string  `json:"nama_rek_aset"`
 	Perolehan           string  `json:"perolehan"`
 	TahunPerolehan      string  `json:"tahun_perolehan"`
+	TanggalPerolehan    string  `json:"tanggal_perolehan"`
 	Kondisi             string  `json:"kondisi"`
 	PenggunaBarang      string  `json:"pengguna_barang"`
 	HargaSatuan         float64 `json:"harga_satuan"`
@@ -85,4 +86,16 @@ type ReportInventaris struct {
 	VerifikatorFlag     bool    `json:"verifikator_flag"`
 	VerifikatorStatus   int     `json:"verifikator_status"`
 	VerifikatorIsRevise bool    `json:"verifikator_is_revise"`
+}
+
+type GetInvoiceResponse struct {
+	*Inventaris
+	NamaRekAset       string  `json:"nama_rek_aset"`
+	KelompokKib       string  `json:"kelompok_kib"`
+	Jenis             string  `json:"jenis"`
+	StatusVerifikasi  string  `json:"status_verifikasi"`
+	PenggunaBarang    string  `json:"pengguna_barang"`
+	Detail            string  `json:"detail"`
+	CanDelete         bool    `json:"can_delete"`
+	BiayaPemeliharaan float64 `json:"biaya_pemeliharaan"`
 }
