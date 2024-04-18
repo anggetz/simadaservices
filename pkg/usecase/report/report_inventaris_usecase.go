@@ -113,6 +113,8 @@ func (i *reportInventarisUseCase) Get(start int, limit int, g *gin.Context) ([]m
 		}
 	}
 
+	whereClause = append(whereClause, "inventaris.deleted_at IS NULL")
+
 	sql = sql.Where(strings.Join(whereClause, " AND "))
 
 	if err := sql.Find(&inventaris).Error; err != nil {
@@ -143,7 +145,8 @@ func (i *reportInventarisUseCase) Get(start int, limit int, g *gin.Context) ([]m
 		Raw(`SELECT sum(coalesce(harga_satuan * jumlah,0)) FROM inventaris `).
 		Joins("join m_barang as mb ON mb.id = inventaris.pidbarang").
 		Joins("join m_organisasi mo ON mo.id = inventaris.pidopd").
-		Joins("left join inventaris_sensus s ON s.id = inventaris.id_sensus")
+		Joins("left join inventaris_sensus s ON s.id = inventaris.id_sensus").
+		Where("inventaris.deleted_at IS NULL and inventaris.draft IS NULL")
 
 	var totalPerolehan float64
 	sqlSumPerolehan := sqlSumPelohan.Scan(&totalPerolehan)

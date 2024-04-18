@@ -217,7 +217,7 @@ func (i *reportRekapitulasiUseCase) GetData(start int, limit int, tgl string, pi
 		Where(`(rp.pidopd::TEXT = pr.pidopd OR TRIM(BOTH FROM pr.pidopd) = '') 
 				AND (rp.pidopd_cabang::TEXT = pr.pidopd_cabang OR TRIM(BOTH FROM pr.pidopd_cabang) = '') 
 				AND (rp.pidupt::TEXT = pr.pidupt OR TRIM(BOTH FROM pr.pidupt) = '') 
-				AND rp.draft is null `)
+				AND rp.draft is null AND rp.deleted_at is null`)
 	if jenisperiode == "1" {
 		sqlQuery = sqlQuery.Where(" TO_CHAR(rp.tgl_dibukukan, 'yyyy-mm') <= pr.tanggal ")
 	} else {
