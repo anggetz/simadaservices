@@ -628,7 +628,7 @@ func (i *invoiceUseCaseImpl) buildGetInventarisFilter(q QueryParamInventaris, ex
 	}
 
 	if q.JenisBarangs != "" && q.JenisBarangs != "null" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", q.JenisBarangs))
+		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_akun || '.' || m_barang.kode_kelompok || '.' || m_barang.kode_jenis = '%s'", q.JenisBarangs))
 	}
 
 	if q.KodeObjek != "" {
