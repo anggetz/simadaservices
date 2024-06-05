@@ -46,6 +46,8 @@ services:
       context: ./
       dockerfile: ./cmd/service-transaction/Dockerfile
     restart: always
+    deploy:
+      replicas: 2
     volumes:
       - ./storage:/storage
     depends_on:
