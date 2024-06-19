@@ -120,7 +120,7 @@ func (i *invoiceUseCaseImpl) GetPemeliharaanInventaris(limit, start int, g *gin.
 	}
 
 	if g.Query("f_jenis_filter") != "" {
-		whereClause = append(whereClause, fmt.Sprintf("m_barang.kode_jenis = '%s'", g.Query("f_jenis_filter")))
+		whereClause = append(whereClause, fmt.Sprintf("CONCAT(m_barang.kode_akun, '.', m_barang.kode_kelompok, '.', m_barang.kode_jenis) = '%s'", g.Query("f_jenis_filter")))
 	}
 
 	if g.Query("search[value]") != "" {
