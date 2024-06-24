@@ -23,6 +23,7 @@ type Config struct {
 	SIMADA_SV_PORT_AUTH        string
 	SIMADA_SV_PORT_TRANSACTION string
 	SIMADA_SV_PORT_REPORT      string
+	SIMADA_SV_PORT_GT_WA       string
 	DB                         dbConfig
 	REDIS                      redisConfig
 	ELASTIC                    elasticConfig

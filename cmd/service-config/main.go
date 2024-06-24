@@ -33,6 +33,7 @@ func main() {
 	kernel.Kernel.Config.SIMADA_SV_PORT_AUTH = os.Getenv("SIMADA_SV_PORT_AUTH")
 	kernel.Kernel.Config.SIMADA_SV_PORT_TRANSACTION = os.Getenv("SIMADA_SV_PORT_TRANSACTION")
 	kernel.Kernel.Config.SIMADA_SV_PORT_REPORT = os.Getenv("SIMADA_SV_PORT_REPORT")
+	kernel.Kernel.Config.SIMADA_SV_PORT_GT_WA = os.Getenv("SIMADA_SV_PORT_GT_WA")
 
 	kernel.Kernel.Config.DB.Database = os.Getenv("SIMADA_DB_PG_DB")
 	kernel.Kernel.Config.DB.Host = os.Getenv("SIMADA_DB_PG_HOST")
@@ -55,7 +56,7 @@ func main() {
 
 	kernel.Kernel.Config.ELASTIC.Address = os.Getenv("ELASTIC_ADDRESS")
 
-	fmt.Println(kernel.Kernel.Config.DB.Host)
+	fmt.Println(kernel.Kernel.Config.SIMADA_SV_PORT_GT_WA)
 
 	confMarshalled, err := json.Marshal(kernel.Kernel.Config)
 	if err != nil {
