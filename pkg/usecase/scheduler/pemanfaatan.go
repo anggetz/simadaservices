@@ -2,7 +2,6 @@ package scheduler
 
 import (
 	"simadaservices/pkg/models"
-	"strconv"
 	"time"
 
 	"gorm.io/gorm"
@@ -25,9 +24,7 @@ func NewPemanfaatan(db *gorm.DB) Pemanfaatan {
 func (p *pemanfaatanImpl) Execute() error {
 	pemanfaatans := []models.Pemanfaatan{}
 
-	txDbPemanfaatan := p.db.Raw(`
-		select * from pemanfaatan where TO_DATE(date_part('year', NOW()) || '-' || date_part('month', tgl_mulai) || '-' || date_part('day', tgl_mulai), 'YYYY-MM-DD') - INTERVAL '40 DAY' = DATE(NOW())
-	`).Scan(&pemanfaatans)
+	txDbPemanfaatan := p.db.Model(new(models.Pemanfaatan)).Where("TO_DATE(date_part('year', NOW()) || '-' || date_part('month', tgl_mulai) || '-' || date_part('day', tgl_mulai), 'YYYY-MM-DD') - INTERVAL '40 DAY' = DATE(NOW())").Preload("MMitra").Find(&pemanfaatans)
 
 	if txDbPemanfaatan.Error != nil {
 		return txDbPemanfaatan.Error
@@ -53,7 +50,7 @@ func (p *pemanfaatanImpl) Execute() error {
 		tglMulaiWithYearNow := time.Date(pemanfaatan.TglMulai.Year(), pemanfaatan.TglMulai.Month(), pemanfaatan.TglMulai.Day(), pemanfaatan.TglMulai.Hour(), pemanfaatan.TglMulai.Minute(), pemanfaatan.TglMulai.Second(), 0, pemanfaatan.TglMulai.Location())
 
 		notif := &models.Notification{
-			Body: "Jatuh Tempo Pembayaran Kontribusi Tetap " + pemanfaatan.NoPerjanjian + " mitra " + strconv.Itoa(pemanfaatan.Mitra) + " barang paling lambat pada " + tglMulaiWithYearNow.Format("2006-01-02 15:04:05") +
+			Body: "Jatuh Tempo Pembayaran Kontribusi Tetap " + pemanfaatan.NoPerjanjian + " mitra " + pemanfaatan.MMitra.Nama + " barang paling lambat pada " + tglMulaiWithYearNow.Format("2006-01-02 15:04:05") +
 				" sebesar Rp. " + pemanfaatan.JumlahKontribusi,
 			CreatedBy: users[0].ID,
 			Title:     "Info jatuh tempo",

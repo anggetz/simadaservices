@@ -9,6 +9,7 @@ type Pemanfaatan struct {
 	Umur             int        `json:"umur"`
 	UmurSatuan       string     `json:"umur_satuan"`
 	NoPerjanjian     string     `json:"no_perjanjian"`
+	MMitra           *MMitra    `json:"m_mitra" gorm:"foreignKey:mitra"`
 	TglMulai         *time.Time `json:"tgl_mulai"`
 	TglAkhir         *time.Time `json:"tgl_akhir"`
 	Mitra            int        `json:"mitra"`
@@ -26,5 +27,5 @@ type Pemanfaatan struct {
 
 // Define the table name for the Pemeliharaan model
 func (p *Pemanfaatan) TableName() string {
-	return "pemanfataan"
+	return "pemanfaatan"
 }
