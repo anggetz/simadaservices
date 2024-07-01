@@ -1,7 +1,6 @@
 package scheduler
 
 import (
-	"fmt"
 	"simadaservices/pkg/models"
 	"strconv"
 	"time"
@@ -65,11 +64,8 @@ func (p *pemanfaatanImpl) Execute() error {
 
 		txCreateNotif := p.db.Save(&notif)
 		if txCreateNotif.Error != nil {
-			fmt.Println("here!", len(users))
 			return txCreateNotif.Error
 		}
-
-		fmt.Println("here!", len(users))
 
 		for _, usr := range users {
 
