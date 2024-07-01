@@ -81,7 +81,7 @@ func main() {
 	// stop scheduler tepat sebelum fungsi berakhir
 	defer scheduler.Stop()
 
-	scheduler.AddFunc("* * * * *", func() {
+	scheduler.AddFunc("00 00 * * *", func() {
 		// log.Println(">>> service worker : export bmd atl scheduler")
 		// rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
 		log.Println("INFO", "Creating alert pemanfaatan")
