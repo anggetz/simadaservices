@@ -41,6 +41,20 @@ services:
     networks:
       - simada_default
       - service_epersediaan_epersediaan
+  service-scheduler:
+    build:
+      context: ./
+      dockerfile: ./cmd/service-scheduler/Dockerfile
+    restart: always
+    deploy:
+      replicas: 2
+    volumes:
+      - ./storage:/storage
+    depends_on:
+      - service-config
+    networks:
+      - simada_default
+      - service_epersediaan_epersediaan
   service-transaction:
     build:
       context: ./
