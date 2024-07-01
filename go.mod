@@ -20,10 +20,13 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.0.0 // indirect
-	github.com/anggetz/golangwa v0.0.0-20240624013130-487be612c1d8 // indirect
+	github.com/anggetz/golangwa v0.0.0-20240627055023-b81181400603 // indirect
+	github.com/bxcodec/faker/v3 v3.8.1 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/rs/zerolog v1.32.0 // indirect
+	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e // indirect
 	go.mau.fi/libsignal v0.1.0 // indirect
 	go.mau.fi/util v0.4.1 // indirect
 	go.mau.fi/whatsmeow v0.0.0-20240603101645-64bc969fbe78 // indirect

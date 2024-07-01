@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -8,6 +9,8 @@ import (
 	"os"
 	"simadaservices/cmd/service-gateway-whatsapp/kernel"
 	"simadaservices/pkg/middlewares"
+	"simadaservices/pkg/models"
+	"text/template"
 	"time"
 
 	"github.com/anggetz/golangwa/pubsup"
@@ -102,6 +105,47 @@ func main() {
 			})
 		})
 
+		apiGroup.GET("/try-template-get-model", func(ctx *gin.Context) {
+			templateModel := ctx.Query("template-model")
+
+			switch templateModel {
+			case "pemanfaatan":
+				{
+					timeNow := time.Now()
+					tglAkhir := timeNow.Add(24 * time.Minute)
+					model := models.Pemanfaatan{
+						ID:               0,
+						PIDInventaris:    0,
+						Peruntukan:       "FAKER",
+						Umur:             20,
+						UmurSatuan:       "Tahun",
+						NoPerjanjian:     "XX/FAKER/00-00",
+						TglMulai:         &timeNow,
+						TglAkhir:         &tglAkhir,
+						Mitra:            0,
+						TipeKontribusi:   "Kontribusi",
+						JumlahKontribusi: "",
+						Aktif:            "1",
+						Pegawai:          0,
+						BagiHasil:        10000,
+						Tetap:            10000,
+						Draft:            "1",
+					}
+
+					ctx.JSON(http.StatusOK, gin.H{
+						"data": model,
+					})
+				}
+			default:
+				{
+					ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+						"message": "model not supported",
+					})
+					return
+				}
+			}
+		})
+
 		apiGroup.POST("/send-message", func(ctx *gin.Context) {
 			respondStruct := struct {
 				Ok bool
@@ -113,6 +157,45 @@ func main() {
 			}{}
 
 			err := ctx.BindJSON(&webReq)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"message": err.Error(),
+				})
+				return
+			}
+			timeNow := time.Now()
+			tglAkhir := timeNow.Add(24 * time.Minute)
+			model := models.Pemanfaatan{
+				ID:               0,
+				PIDInventaris:    0,
+				Peruntukan:       "FAKER",
+				Umur:             20,
+				UmurSatuan:       "Tahun",
+				NoPerjanjian:     "XX/FAKER/00-00",
+				TglMulai:         &timeNow,
+				TglAkhir:         &tglAkhir,
+				Mitra:            0,
+				TipeKontribusi:   "Kontribusi",
+				JumlahKontribusi: "",
+				Aktif:            "1",
+				Pegawai:          0,
+				BagiHasil:        10000,
+				Tetap:            10000,
+				Draft:            "1",
+			}
+
+			tmpl, err := template.New("test").Parse(webReq.Message)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"message": err.Error(),
+				})
+				return
+			}
+
+			var tpl bytes.Buffer
+			err = tmpl.Execute(&tpl, model)
+
+			webReq.Message = tpl.String()
 			if err != nil {
 				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
 					"message": err.Error(),
@@ -189,6 +272,51 @@ func main() {
 
 			ctx.JSON(http.StatusOK, gin.H{
 				"data": isLoggedInResp,
+			})
+		})
+
+		apiGroup.POST("/get-pair-code", func(ctx *gin.Context) {
+
+			payload := pubsup.PairCode{}
+
+			err := ctx.BindJSON(&payload)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"message": err.Error(),
+				})
+				return
+			}
+
+			byPayload, err := json.Marshal(payload)
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"message": err.Error(),
+				})
+				return
+			}
+
+			respond, err := nc.Request("simada_wa.get-pair-code", byPayload, time.Second*10)
+
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"message": err.Error(),
+				})
+				return
+			}
+
+			getPairCodeResp := pubsup.PairCodeResponse{}
+
+			err = json.Unmarshal(respond.Data, &getPairCodeResp)
+
+			if err != nil {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, gin.H{
+					"message": err.Error(),
+				})
+				return
+			}
+
+			ctx.JSON(http.StatusOK, gin.H{
+				"data": getPairCodeResp,
 			})
 		})
 

@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"simadaservices/cmd/service-scheduler/kernel"
 	"simadaservices/pkg/tools"
-	"simadaservices/pkg/usecase/scheduler"
+	schedulerLogic "simadaservices/pkg/usecase/scheduler"
+	"syscall"
 	"time"
 
 	"github.com/nats-io/nats.go"
+	"github.com/robfig/cron/v3"
 )
 
 func setUpDB() {
@@ -74,9 +77,36 @@ func main() {
 
 	setUpDB()
 
-	_, err = scheduler.NewSaldoAwal(kernel.Kernel.Config.DB.Connection).Execute(1, 2024)
-	if err != nil {
-		panic(err.Error())
-	}
+	scheduler := cron.New(cron.WithLocation(time.Local))
+	// stop scheduler tepat sebelum fungsi berakhir
+	defer scheduler.Stop()
+
+	scheduler.AddFunc("00 00 * * *", func() {
+		// log.Println(">>> service worker : export bmd atl scheduler")
+		// rest.NewApi().GetBmdAtl(kernel.Kernel.Config.DB.Connection, connectionRedis)
+		log.Println("INFO", "Creating alert pemanfaatan")
+		err := schedulerLogic.NewPemanfaatan(kernel.Kernel.Config.DB.Connection).Execute()
+		if err != nil {
+			panic(err)
+		}
+	}) // SETIAP HARI PUKUL 9 malam setiap hari
+
+	go scheduler.Start()
+
+	// _, err = schedulerLogic.NewSaldoAwal(kernel.Kernel.Config.DB.Connection).Execute(1, 2024)
+	// if err != nil {
+	// 	panic(err.Error())
+	// }
 	// try the sc
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(signals)
+
+	<-signals // wait for signal
+	go func() {
+		fmt.Println(">>> error : hard exit on second signal (in case shutdown gets stuck")
+		<-signals // hard exit on second signal (in case shutdown gets stuck)
+		os.Exit(1)
+	}()
+
 }
